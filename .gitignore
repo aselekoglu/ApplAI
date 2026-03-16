@@ -1,0 +1,27 @@
+# Environment and Secrets
+.env
+*.json
+!requirements.txt
+google_credentials.json
+google_oauth_credentials.json
+google_token.json
+
+# Local Environment
+.conda/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Streamlit
+.streamlit/
+
+# Generated Files
+docs/*.pdf
+docs/*.docx
+*.pdf
+*.docx
+
+# OS files
+.DS_Store
+Thumbs.db

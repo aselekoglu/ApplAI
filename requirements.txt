@@ -1,0 +1,10 @@
+crewai
+crewai-tools
+python-dotenv
+pdfplumber
+python-docx
+langchain-openai
+langchain-google-genai
+pydantic
+streamlit
+google-generativeai
