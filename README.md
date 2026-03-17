@@ -41,6 +41,31 @@ ApplAI is a sleek, AI-powered tool designed to streamline your job application p
    streamlit run app.py
    ```
 
+## ☁️ Google Drive Integration (Optional)
+
+To enable automatic uploading and conversion of your CVs to Google Docs:
+
+1. **Create a Google Cloud Project**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/).
+   - Create a new project (e.g., `ApplAI-Integration`).
+
+2. **Enable APIs**:
+   - Navigate to **APIs & Services > Library**.
+   - Search for and **Enable** both **Google Drive API** and **Google Docs API**.
+
+3. **Create Service Account Credentials**:
+   - Go to **APIs & Services > Credentials**.
+   - Click **+ CREATE CREDENTIALS > Service account**.
+   - Name it `appl-ai-agent` and click **Create and Continue**, then **Done**.
+   - Click on the newly created service account email -> **Keys tab > Add Key > Create new key (JSON)**.
+   - Rename the downloaded file to `google_credentials.json` and place it in the project root.
+
+4. **Share a Folder**:
+   - Create a folder in your personal Google Drive (e.g., `ApplAI Final Outputs`).
+   - Share the folder with your **Service Account email** (found in Step 3) as an **Editor**.
+   - Copy the folder ID from the URL (the alphanumeric string at the end) and add it to your `.env` file:
+     `GOOGLE_DRIVE_FOLDER_ID=your_folder_id_here`
+
 ## 🔒 Privacy & Security
 
 The project includes a `.gitignore` to ensure your API keys and Google OAuth tokens are never committed to public repositories.
