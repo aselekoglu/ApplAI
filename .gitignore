@@ -25,3 +25,5 @@ docs/*.docx
 # OS files
 .DS_Store
 Thumbs.db
+scripts/cleanup_ports.ps1
+tests/test_agent_logic.py
