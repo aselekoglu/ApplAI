@@ -1,15 +1,30 @@
 import streamlit as st
 import time
-import sys
 import os
+import json
+import datetime
+import re
+import textwrap
+import requests
+import threading
+import html
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 
-# Add local .conda packages to sys.path as a FALLBACK if not in the main environment
-_base_dir = os.path.dirname(os.path.abspath(__file__))
-_conda_site = os.path.join(_base_dir, ".conda", "Lib", "site-packages")
-if os.path.exists(_conda_site) and _conda_site not in sys.path:
-    sys.path.append(_conda_site)
+# Local imports
+import agent_workflow
+import pdf_generator
+import pdf_parser
+try:
+    import google_integration
+except ImportError:
+    google_integration = None
 
-# Custom Apple HIG Styling
+load_dotenv()
+
+# =============================================================================
+# Premium UI Styles & Animations
+# =============================================================================
 APPLE_CSS = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -23,596 +38,368 @@ APPLE_CSS = """
         color: #ffffff;
     }
     
-    /* Glassmorphism containers */
     .glass-panel {
-        background: rgba(30, 30, 35, 0.7);
+        background: rgba(30,30,35,0.7);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255,255,255,0.1);
         border-radius: 18px;
         padding: 24px;
-        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+        box-shadow: 0 8px 32px 0 rgba(31,38,135,0.07);
         margin-bottom: 24px;
-        transition: transform 0.3s ease;
     }
     
-    .glass-panel:hover {
-        transform: translateY(-2px);
+    .loading-overlay {
+        position: fixed;
+        top: 0; left: 0; width: 100vw; height: 100vh;
+        background: #121216 !important; 
+        z-index: 99999;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
     }
-    
-    h1, h2, h3, h4, p, label, .stMarkdown {
-        color: #ffffff !important;
-    }
-    
-    h1 {
-        font-weight: 700;
-        letter-spacing: -1.2px;
-        color: #ffffff !important;
-    }
-    
-    /* Make input text readable in dark mode */
-    .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stSelectbox>div>div>div {
-        color: #ffffff !important;
-        background-color: rgba(0, 0, 0, 0.4) !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
-    }
-    
-    /* Ensure dropdown menu text is readable */
-    ul[role="listbox"] {
-        background-color: #323842 !important;
-    }
-    li[role="option"] {
-        color: #ffffff !important;
-    }
-    
-    .stButton>button {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255,255,255,0.2);
-        border-radius: 14px;
-        color: #ffffff;
-        font-weight: 500;
-        backdrop-filter: blur(10px);
-        transition: all 0.2s ease-in-out;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    
-    .stButton>button:hover {
-        background: #0071e3;
+
+    .step-card {
+        background: #1e2227;
+        border: 1px solid rgba(255,255,255,0.25);
+        border-radius: 40px;
+        padding: 4.5rem;
+        width: 940px;
+        max-width: 92vw;
+        box-shadow: 0 80px 160px rgba(0,0,0,1.0);
         color: white;
-        transform: scale(1.02);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .log-window {
+        background: #0d0f12;
+        border-radius: 24px;
+        padding: 2rem;
+        height: 380px;
+        overflow-y: auto;
+        font-family: 'Fira Code', 'Monaco', monospace;
+        font-size: 0.95rem;
+        margin-top: 2rem;
+        border: 1px solid rgba(255,255,255,0.1);
+        line-height: 1.8;
+        color: #d1d4d9;
+    }
+
+    .log-line { 
+        margin-bottom: 14px; 
+        color: #e0e4eb; 
+        border-left: 4px solid #0071e3; 
+        padding-left: 20px; 
+        white-space: pre-wrap; 
+        word-wrap: break-word; 
+    }
+    
+    .step-header { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        margin-bottom: 2rem; 
+    }
+    
+    .step-indicator { 
+        background: #0071e3; 
+        padding: 14px 28px; 
+        border-radius: 20px; 
+        font-weight: 700; 
+        font-size: 1.1rem; 
+        text-transform: uppercase; 
+        letter-spacing: 1.2px; 
+    }
+
+    .nav-container-fixed {
+        margin-top: 45px;
+        display: flex;
+        gap: 30px;
+        justify-content: center;
+        width: 100%;
+    }
+    
+    /* Post-Run Log Styles */
+    .history-card {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-top: 1rem;
     }
 </style>
 """
 
+def init_state():
+    defaults = {
+        'workflow_step_history': [],
+        'workflow_view_index': -1,
+        'workflow_is_running': False,
+        'workflow_generator': None,
+        'final_workflow_result': None,
+        'workflow_completed': False,
+        'workflow_inputs': {},
+        'cv_metadata': {},
+        'match_score': "",
+        'pain_points': "",
+        'strong_points': "",
+        'docs_url': None,
+        'cv_filename': "",
+        'cl_filename': "",
+        'cover_letter_text': "",
+        'cv_file_bytes': None,
+        'cover_letter_bytes': None,
+        'kw_data': {},
+        'change_log': None,
+        'agent_outputs': [],
+        'extracted_co': "",
+        'extracted_ti': "",
+        'job_desc_input': "",
+        'jd_url': "",
+        'jd_method': "Paste Text"
+    }
+    if 'workflow_lock' not in st.session_state:
+        st.session_state.workflow_lock = threading.Lock()
+    for key, val in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = val
+
 def get_available_models():
-    import os
-    from dotenv import load_dotenv
-    load_dotenv()
-    
     api_key = os.getenv("GEMINI_API_KEY")
-    default_models = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"]
-    if not api_key:
-        return default_models
-        
+    default_models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+    if not api_key: return default_models
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
-        models = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                if m.name.startswith("models/"):
-                    models.append(m.name.replace("models/", ""))
-                else:
-                    models.append(m.name)
-        
-        # Sort so preferred models are near top
-        preferred = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]
+        models = [m.name.replace("models/", "") for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        preferred = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
         models.sort(key=lambda x: (0, preferred.index(x)) if x in preferred else (1, x))
         return models if models else default_models
-    except ImportError:
-        # If google.generativeai is not installed, fallback to defaults
-        return default_models
-    except Exception:
-        return default_models
+    except Exception: return default_models
 
 def main():
-    st.set_page_config(page_title="ApplAI - Job Workflow", layout="centered")
+    init_state()
+    st.set_page_config(page_title="ApplAI - AI CV Tailoring", layout="wide")
     st.markdown(APPLE_CSS, unsafe_allow_html=True)
-    
-    # Initialize session state for workflow results so they persist when buttons are clicked
-    if "workflow_completed" not in st.session_state:
-        st.session_state.workflow_completed = False
-        st.session_state.match_score = ""
-        st.session_state.pain_points = ""
-        st.session_state.strong_points = ""
+
+    # ── 1. LOADING OVERLAY ──────────────────────────────────────────────────
+    if st.session_state.workflow_is_running and st.session_state.workflow_generator:
+        is_at_latest = (st.session_state.workflow_view_index == len(st.session_state.workflow_step_history) - 1)
         
-    st.markdown("<h1>ApplAI Workflow Manager</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #a1a1a6 !important; font-size: 18px;'>Automated Job Application & Tailoring pipeline.</p>", unsafe_allow_html=True)
+        should_rerun = False
+        if is_at_latest or st.session_state.workflow_view_index == -1:
+            if st.session_state.workflow_lock.acquire(blocking=False):
+                try:
+                    update = next(st.session_state.workflow_generator)
+                    if update.status == "done" or not st.session_state.workflow_step_history:
+                        if st.session_state.workflow_step_history and st.session_state.workflow_step_history[-1].step_num == update.step_num:
+                            st.session_state.workflow_step_history[-1] = update
+                        else:
+                            st.session_state.workflow_step_history.append(update)
+                    st.session_state.workflow_view_index = len(st.session_state.workflow_step_history) - 1
+                    
+                    if update.partial_result:
+                        st.session_state.final_workflow_result = update.partial_result
+                        st.session_state.workflow_is_running = False
+                        st.session_state.workflow_generator = None
+                        should_rerun = True
+                except StopIteration:
+                    st.session_state.workflow_is_running = False
+                    st.session_state.workflow_generator = None
+                    should_rerun = True
+                except ValueError as e:
+                    if "generator already executing" in str(e): should_rerun = True
+                    else: raise e
+                finally:
+                    st.session_state.workflow_lock.release()
+            else:
+                time.sleep(0.1); should_rerun = True
+
+        if should_rerun: st.rerun()
+
+        if st.session_state.workflow_view_index >= 0:
+            curr = st.session_state.workflow_step_history[st.session_state.workflow_view_index]
+            safe_lines = [html.escape(line) for line in curr.detail_lines]
+            log_lines_html = "".join([f'<div class="log-line">{line}</div>' for line in safe_lines])
+            
+            # Using st.empty() for a clean full-screen takeover if possible, otherwise fixed flex
+            st.markdown(f"""
+                <div class="loading-overlay">
+                    <div style="display:flex; flex-direction:column; align-items:center;">
+                        <div class="step-card">
+                            <div class="step-header">
+                                <h2 style="margin:0; color:white; font-weight:800; font-size:2.8rem;">{curr.module_name}</h2>
+                                <div class="step-indicator">Step {curr.step_num} of 8</div>
+                            </div>
+                            <p style="font-size:1.6rem; color:#0A84FF; font-weight:600; margin-bottom:1.8rem;">{curr.summary}</p>
+                            <div class="log-window">
+                                {log_lines_html}
+                            </div>
+                        </div>
+                        <div class="nav-container-fixed">
+                            <!-- Streamlit controls inside this spatial zone -->
+                        </div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            # Button layout using container but floating within the flex center
+            btn_col1, btn_col2, btn_col3, btn_col4, btn_col5 = st.columns([1,2,2,2,1])
+            with btn_col2:
+                if st.session_state.workflow_view_index > 0:
+                    if st.button("← Previous Agent Step", key="btn_p_v6", use_container_width=True):
+                        st.session_state.workflow_view_index -= 1; st.rerun()
+            with btn_col4:
+                if st.session_state.workflow_view_index < len(st.session_state.workflow_step_history) - 1:
+                    if st.button("Next Agent Step →", key="btn_n_v6", use_container_width=True):
+                        st.session_state.workflow_view_index += 1; st.rerun()
+            
+            if is_at_latest and st.session_state.workflow_is_running:
+                time.sleep(0.1); st.rerun()
+            st.stop()
+
+    # ── 2. RESULT PROCESSING ───────────────────────────────────────────────
+    if st.session_state.final_workflow_result and not st.session_state.workflow_completed:
+        res = st.session_state.final_workflow_result
+        inp = st.session_state.workflow_inputs
+        with st.spinner("Compiling Final Results..."):
+            qa = res.pydantic
+            st.session_state.match_score = f"{getattr(qa, 'matching_rate_score', 0)}%"
+            st.session_state.pain_points = "<br>".join([f"- {p}" for p in getattr(qa, 'key_pain_points', [])])
+            st.session_state.strong_points = "<br>".join([f"- {s}" for s in getattr(qa, 'strong_points', [])])
+            
+            surname = res.canonical_cv.full_name.split()[-1] if res.canonical_cv.full_name else "Candidate"
+            safe_co = re.sub(r'\W+', '_', inp.get("company_name", "Co"))
+            cv_path = f"docs/{surname}_CV_Tailored_{safe_co}.docx"
+            cl_path = f"docs/{surname}_CL_Tailored_{safe_co}.pdf"
+
+            template = os.path.join("docs", inp.get("selected_cv_pdf", "").replace(".pdf", ".docx"))
+            if not os.path.exists(template):
+                docx_files = [f for f in os.listdir("docs") if f.endswith(".docx") and "Tailored" not in f]
+                template = os.path.join("docs", docx_files[0]) if docx_files else None
+            
+            if template: pdf_generator.generate_tailored_document(template, cv_path, {"tailored_output": res.tailored_output})
+            cl_txt = res.cover_letter or "No cover letter."
+            try:
+                from reportlab.pdfgen import canvas
+                from reportlab.lib.pagesizes import letter
+                c = canvas.Canvas(cl_path, pagesize=letter); c.setFont("Helvetica", 11); y = 750
+                for line in cl_txt.splitlines():
+                    for wrap in textwrap.wrap(line or " ", width=90):
+                        c.drawString(60, y, wrap); y -= 15
+                        if y < 50: c.showPage(); c.setFont("Helvetica", 11); y = 750
+                c.save()
+            except:
+                with open(cl_path, "w") as f: f.write(cl_txt)
+            
+            if google_integration:
+                try: st.session_state.docs_url = google_integration.upload_to_drive(cv_path, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", convert_to_docs=True)
+                except: pass
+
+            with open(cv_path, "rb") as f: st.session_state.cv_file_bytes = f.read()
+            with open(cl_path, "rb") as f: st.session_state.cover_letter_bytes = f.read()
+            st.session_state.cv_filename = os.path.basename(cv_path)
+            st.session_state.cl_filename = os.path.basename(cl_path)
+            st.session_state.cover_letter_text = cl_txt
+            
+            ats = res.ats_report
+            st.session_state.kw_data = {"jd": set(ats.jd_keywords), "cv": set(ats.covered_keywords), "added": set(ats.added_by_tailoring), "gaps": set(ats.gap_keywords)}
+            st.session_state.workflow_completed = True; st.rerun()
+
+    # ── 3. MAIN UI ───────────────────────────────────────────────────────────
+    st.title("ApplAI - Smart CV Tailoring")
     
-    # Create Tabs
-    tab1, tab2 = st.tabs(["Application Generator", "CV Corpus Manager"])
+    t_gen, t_lib = st.tabs(["Application Generator", "CV Library"])
     
-    with tab1:
-        # Input Section
+    with t_gen:
         st.markdown("<div class='glass-panel'>", unsafe_allow_html=True)
         st.markdown("<h3>1. Job Details</h3>", unsafe_allow_html=True)
-        job_input_type = st.radio("Input Method", ["Paste Text", "Job URL"], horizontal=True)
+        jd_method = st.radio("Input Method", ["Paste Text", "Job URL"], horizontal=True, key="jd_meth_v6")
+        if jd_method == "Job URL":
+            st.text_input("Job URL", key="jd_url_v6")
+            if st.button("Fetch Job Details", key="btn_scrape_v6"):
+                try:
+                    resp = requests.get(st.session_state.jd_url_v6, headers={"User-Agent":"Mozilla/5.0"}, timeout=10)
+                    soup = BeautifulSoup(resp.text, "lxml")
+                    for s in soup(["script", "style"]): s.decompose()
+                    st.session_state.job_desc_input = soup.get_text(separator="\n", strip=True)
+                    st.rerun()
+                except: st.error("Scrape failed.")
         
-        def _run_extraction(text):
-            """Call Gemini to extract company and job title from text."""
-            import os as _os
-            import google.generativeai as _genai
-            _genai.configure(api_key=_os.getenv("GEMINI_API_KEY"))
-            _m = _genai.GenerativeModel("gemini-2.5-flash")
-            _prompt = (
-                "Extract the company name and job title from this job description. "
-                "Reply ONLY in this exact format with no extra text:\n"
-                f"COMPANY: <company name>\nTITLE: <job title>\n\nJD:\n{text[:3000]}"
-            )
-            _resp = _m.generate_content(_prompt)
-            _lines = {l.split(":")[0].strip(): ":".join(l.split(":")[1:]).strip()
-                      for l in _resp.text.strip().splitlines() if ":" in l}
-            st.session_state["_extracted_company"] = _lines.get("COMPANY", "")
-            st.session_state["_extracted_title"] = _lines.get("TITLE", "")
-            # Also pre-populate the edit widget keys so value= is not ignored on re-render
-            st.session_state["_edit_company"] = st.session_state["_extracted_company"]
-            st.session_state["_edit_title"] = st.session_state["_extracted_title"]
-
-
-        job_desc = ""
-        if job_input_type == "Paste Text":
-            job_desc = st.text_area("Paste the Job Description Here", height=150)
-            if job_desc and st.button("🔍 Extract Company & Title"):
-                with st.spinner("Extracting..."):
-                    _run_extraction(job_desc)
-        else:
-            job_url = st.text_input("Enter Job URL (LinkedIn, Indeed, etc.)")
-            if job_url:
-                if st.button("Fetch Job Description from URL"):
-                    with st.spinner("Fetching job details from URL..."):
-                        try:
-                            import requests
-                            from bs4 import BeautifulSoup
-                            is_linkedin = "linkedin.com" in job_url
-                            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-                            resp = requests.get(job_url, headers=headers, timeout=15)
-                            soup = BeautifulSoup(resp.text, "lxml")
-                            page_text_preview = soup.get_text()
-                            login_signals = ["Sign in", "Log in", "Join or sign in", "Join LinkedIn", "Agree & Join"]
-                            login_hits = sum(1 for s in login_signals if s in page_text_preview)
-                            if login_hits >= 3 or is_linkedin:
-                                st.warning(
-                                    "⚠️ LinkedIn blocks automated access. Please **open the job posting in your browser**, "
-                                    "copy the full job description text, and paste it using the 'Paste Text' input method instead."
-                                )
-                            else:
-                                for tag in soup(["script", "style", "nav", "header", "footer", "aside", "form"]):
-                                    tag.decompose()
-                                jd_selectors = [
-                                    "div.job-description", "div.jobDescription", "div.description",
-                                    "section.description", "div#job-details", "div.show-more-less-html",
-                                    "[data-testid='job-description']", "div.jobs-description",
-                                    "article", "main"
-                                ]
-                                extracted = ""
-                                for sel in jd_selectors:
-                                    el = soup.select_one(sel)
-                                    if el:
-                                        extracted = el.get_text(separator="\n", strip=True)
-                                        if len(extracted) > 300:
-                                            break
-                                if len(extracted) < 300:
-                                    parts = soup.find_all(["p", "li", "h1", "h2", "h3"])
-                                    extracted = "\n".join(p.get_text(strip=True) for p in parts if p.get_text(strip=True))
-                                lines = [l for l in extracted.splitlines() if l.strip()]
-                                text = "\n".join(lines)[:8000]
-                                if len(text) < 200:
-                                    st.warning("Could not extract a clean job description. Please paste the text manually.")
-                                else:
-                                    st.session_state.fetched_job_desc = text
-                                    # Extract company & title immediately while we have the text
-                                    with st.spinner("Extracting company & title..."):
-                                        try:
-                                            _run_extraction(text)
-                                        except Exception as _ex:
-                                            st.warning(f"Could not auto-extract company/title: {_ex}")
-                                    st.success(f"✅ Fetched ~{len(text)} characters.")
-                        except Exception as e:
-                            st.error(f"Failed to fetch URL: {e}")
-
-                if "fetched_job_desc" in st.session_state:
-                    job_desc = st.text_area("Fetched Job Description (edit if needed)", value=st.session_state.fetched_job_desc, height=200)
-
+        st.text_area("Job Description", height=200, key="job_desc_input")
+        c_co, c_ti = st.columns(2)
+        st.session_state.extracted_co = c_co.text_input("Company Name", value=st.session_state.extracted_co, key="co_v6")
+        st.session_state.extracted_ti = c_ti.text_input("Job Title", value=st.session_state.extracted_ti, key="ti_v6")
+        if st.button("Analyze Company & Title", key="btn_analyze_v6"):
+            with st.spinner("AI Extracting..."):
+                try:
+                    import google.generativeai as genai
+                    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+                    m = genai.GenerativeModel("gemini-1.5-flash")
+                    r = m.generate_content(f"Extract Company Name|Job Title. JD:\n{st.session_state.job_desc_input[:2000]}")
+                    if "|" in r.text:
+                        co, ti = r.text.split("|")
+                        st.session_state.extracted_co, st.session_state.extracted_ti = co.strip(), ti.strip()
+                        st.rerun()
+                except: st.error("Failed to analyze.")
         st.markdown("</div>", unsafe_allow_html=True)
-        
+
         st.markdown("<div class='glass-panel'>", unsafe_allow_html=True)
         st.markdown("<h3>2. Selected Context</h3>", unsafe_allow_html=True)
-        
-        import os
-        import json
-        docs_dir = "docs"
-        metadata_path = os.path.join(docs_dir, "cv_metadata.json")
-        
-        # Load metadata if exists
-        cv_metadata = {}
-        if os.path.exists(metadata_path):
-            try:
-                with open(metadata_path, 'r', encoding='utf-8') as f:
-                    cv_metadata = json.load(f)
-            except Exception:
-                pass
-                
-        available_cvs = [f for f in os.listdir(docs_dir) if f.endswith('.pdf')] if os.path.exists(docs_dir) else []
-        if not available_cvs:
-            available_cvs_display = ["No PDFs found in docs/"]
-        else:
-            # Append tags to display name
-            available_cvs_display = []
-            for cv in available_cvs:
-                tags = cv_metadata.get(cv, {}).get("tags", "")
-                tag_str = f" [{tags}]" if tags else ""
-                available_cvs_display.append(cv + tag_str)
-            
-        c1, c2 = st.columns(2)
-        with c1:
-            selected_cv_display = st.selectbox("Choose a base CV to tailor from Docs library", available_cvs_display)
-            # Remove tag suffix to get the raw filename
-            selected_cv_pdf = selected_cv_display.split(" [")[0] if " [" in selected_cv_display else selected_cv_display
-        with c2:
-            available_models = get_available_models()
-            selected_model = st.selectbox("Select Gemini API Model", available_models)
-        
-        # Show extracted company/title as a styled display + optional edit
-        _co = st.session_state.get("_extracted_company", "")
-        _ti = st.session_state.get("_extracted_title", "")
-        
-        if _co or _ti:
-            st.markdown(
-                f"<div style='background:#1e2533;border-radius:10px;padding:10px 16px;margin-bottom:8px;font-size:0.95em;'>"
-                f"🏢 <b>{_co}</b>&nbsp;&nbsp;|&nbsp;&nbsp;💼 <b>{_ti}</b>"
-                f"</div>",
-                unsafe_allow_html=True
-            )
-            with st.expander("✏️ Edit company or title"):
-                _co = st.text_input("Company Name", value=_co, key="_edit_company")
-                _ti = st.text_input("Job Title", value=_ti, key="_edit_title")
-        else:
-            _co = st.text_input("Company Name", placeholder="Auto-filled after fetch", key="_edit_company")
-            _ti = st.text_input("Job Title", placeholder="Auto-filled after fetch", key="_edit_title")
-        
-        company_name = _co
-        job_title = _ti
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        if st.button("Generate Tailored Application", use_container_width=True):
-            if not job_desc:
-                st.error("Please enter a job description.")
+        pdfs = [f for f in os.listdir("docs") if f.endswith(".pdf")] if os.path.exists("docs") else []
+        sc1, sc2 = st.columns(2)
+        sel_cv = sc1.selectbox("Base Master CV", pdfs if pdfs else ["No CVs available"])
+        sel_model = sc2.selectbox("Execution Model", get_available_models())
+        if st.button("Start Tailoring Sequence", key="btn_start_v6", use_container_width=True):
+            jpath = os.path.join("docs", "json_exports", sel_cv.replace(".pdf", ".json"))
+            if not os.path.exists(jpath): st.error("Index CV first.")
             else:
-                import agent_workflow
-                import os
-                
-                json_path = os.path.join("docs", "json_exports", selected_cv_pdf.replace(".pdf", ".json"))
-                if not os.path.exists(json_path):
-                    st.error(f"JSON data not found for {selected_cv_pdf}. Please run pdf_parser.py.")
-                    st.stop()
-                    
-                with open(json_path, 'r', encoding='utf-8') as f:
-                    base_cv_json_text = f.read()
-                    
-                # Run workflow
-                with st.spinner(f"Running AI Applicant Workflow using {selected_model}..."):
-                    result = agent_workflow.run_application_workflow(job_desc, base_cv_json_text, selected_model)
-                
-                st.success("Workflow Completed!")
-                
-                qa_report = getattr(result, 'pydantic', None)
-                match_score = str(getattr(qa_report, 'matching_rate_score', 'N/A')) + "%" if qa_report else "N/A"
-                pain_points = "<br>".join([f"- {pt}" for pt in getattr(qa_report, 'key_pain_points', ["N/A"])]) if qa_report else "N/A"
-                strong_points = "<br>".join([f"- {pt}" for pt in getattr(qa_report, 'strong_points', ["N/A"])]) if qa_report else "N/A"
-                
-                # Generate output file names from convention: SurnamCV_YEAR_Company_Title
-                import datetime
-                year = datetime.datetime.now().year
-                
-                # Extract surname from CV JSON (try source_file first, then raw_text)
-                try:
-                    cv_data = json.loads(base_cv_json_text)
-                    src = cv_data.get("source_file", "")
-                    # source_file is like "Selekoglu CV 2026 - ..." — first token is the surname
-                    surname = src.split()[0] if src.strip() else ""
-                    if not surname:
-                        # fallback: last word of first line of raw_text
-                        first_line = cv_data.get("raw_text", "").split("\n")[0].strip()
-                        surname = first_line.split()[-1] if first_line else "Candidate"
-                except Exception:
-                    surname = "Candidate"
-
-                def _slug(s):
-                    """Clean a string for use in a filename."""
-                    import re
-                    return re.sub(r'[^\w]', '_', s.strip()).strip('_')
-
-                co = _slug(company_name) if company_name else "Company"
-                title = _slug(job_title) if job_title else "Role"
-
-                cv_filename = f"{surname}CV_{year}_{co}_{title}.docx"
-                cl_filename = f"{surname}_{co}_{title}_Cover_Letter.pdf"
-                cv_output_path = f"docs/{cv_filename}"
-                cover_letter_output_path = f"docs/{cl_filename}"
-                
-                import pdf_generator
-                template_name = selected_cv_pdf.replace(".pdf", ".docx")
-                template = os.path.join("docs", template_name)
-                if not os.path.exists(template):
-                    docx_files = [f for f in os.listdir("docs") if f.endswith(".docx") and not os.path.basename(cv_output_path) == f]
-                    template = os.path.join("docs", docx_files[0]) if docx_files else None
-
-                # Extract structured tailored CV from task2 pydantic output
-                tailored_data = {}
-                tailored_raw = ""
-                try:
-                    tasks_output = getattr(result, 'tasks_output', [])
-                    if len(tasks_output) > 1:
-                        t2 = tasks_output[1]
-                        tailored_raw = getattr(t2, 'raw', '') or ''
-                        t2_pydantic = getattr(t2, 'pydantic', None)
-                        if t2_pydantic:
-                            tailored_data = {
-                                'profile_bullets': getattr(t2_pydantic, 'profile_bullets', []),
-                                'experience_highlights': getattr(t2_pydantic, 'experience_highlights', []),
-                                'skills_to_highlight': getattr(t2_pydantic, 'skills_to_highlight', []),
-                                'tailoring_notes': getattr(t2_pydantic, 'tailoring_notes', ''),
-                                'tailored_raw': tailored_raw,
-                            }
-                        else:
-                            tailored_data = {'tailored_raw': tailored_raw}
-                except Exception as _e:
-                    st.warning(f"Could not parse agent task2 output: {_e}")
-                    tailored_data = {}
-
-                if template and os.path.exists(template):
-                    pdf_generator.generate_tailored_document(template, cv_output_path, tailored_data)
-                else:
-                    st.warning("Could not find matching .docx template. CV file not generated.")
-
-                # Store all task outputs for display
-                try:
-                    tasks_output = getattr(result, 'tasks_output', [])
-                    st.session_state.agent_outputs = [
-                        {
-                            'role': ['Job Analyzer', 'CV Tailorer', 'Cover Letter Writer', 'QA Reviewer'][i] if i < 4 else f'Task {i+1}',
-                            'raw': getattr(t, 'raw', '') or '',
-                            'pydantic': getattr(t, 'pydantic', None),
-                        }
-                        for i, t in enumerate(tasks_output)
-                    ]
-                except Exception:
-                    st.session_state.agent_outputs = []
-                
-                try:
-                    from reportlab.pdfgen import canvas
-                    c = canvas.Canvas(cover_letter_output_path)
-                    c.drawString(100, 750, "Generated Cover Letter")
-                    c.drawString(100, 700, "Match Score: " + match_score)
-                    c.save()
-                except ImportError:
-                    with open(cover_letter_output_path, "w") as f:
-                        f.write("Generated Cover Letter - Please install reportlab for PDF generation")
-                
-                # Google Drive Integration
-                with st.spinner("Syncing with Google Docs..."):
-                    try:
-                        import google_integration
-                        docs_url = google_integration.upload_to_drive(cv_output_path, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", convert_to_docs=True)
-                    except Exception as e:
-                        print(f"Drive integration failed: {e}")
-                        docs_url = None
-                
-                with open(cv_output_path, "rb") as f:
-                    st.session_state.cv_file_bytes = f.read()
-                with open(cover_letter_output_path, "rb") as f:
-                    st.session_state.cover_letter_bytes = f.read()
-                    
-                # Save to session state
-                st.session_state.workflow_completed = True
-                st.session_state.match_score = match_score
-                st.session_state.pain_points = pain_points
-                st.session_state.strong_points = strong_points
-                st.session_state.docs_url = docs_url
-                st.session_state.cv_filename = cv_filename
-                st.session_state.cl_filename = cl_filename
-
-                import re as _re
-                from collections import Counter as _Counter
-
-                # Build keyword sets for analysis
-                def _extract_keywords(text: str) -> set:
-                    """Extract meaningful technical/skill keywords (2+ chars, not stopwords)."""
-                    stopwords = {"the","and","or","to","of","a","an","in","for","with","that","is","are",
-                                 "was","be","as","at","by","on","it","we","our","your","this","have",
-                                 "you","not","from","will","can","all","has","but","they","their","its",
-                                 "also","more","than","other","any","each","per","new","use","using",
-                                 "work","role","team","able","skills","experience","knowledge"}
-                    words = _re.findall(r'\b[a-zA-Z][a-zA-Z0-9#+.\-]{1,}\b', text.lower())
-                    return {w for w in words if w not in stopwords and len(w) > 2}
-
-                _jd_kws = _extract_keywords(job_desc)
-                _cv_kws = _extract_keywords(base_cv_json_text)
-                _tailored_text = " ".join(
-                    tailored_data.get("profile_bullets", []) +
-                    tailored_data.get("experience_highlights", [])
-                )
-                _tailored_kws = _extract_keywords(_tailored_text) if _tailored_text else _cv_kws
-                # Keep top 60 most-frequent JD keywords
-                _jd_counts = _Counter(
-                    w for w in _re.findall(r'\b[a-zA-Z][a-zA-Z0-9#+.\-]{1,}\b', job_desc.lower())
-                    if w in _jd_kws
-                )
-                _top_jd = {w for w, _ in _jd_counts.most_common(60)}
-                st.session_state.kw_data = {
-                    "jd": _top_jd,
-                    "cv": _cv_kws & _top_jd | (_cv_kws & _jd_kws),
-                    "tailored": _tailored_kws & _top_jd | (_tailored_kws & _jd_kws),
-                }
-
-
-        # Always display results if workflow was completed
-        if st.session_state.workflow_completed:
-            # Results Section
-            st.markdown("<div class='glass-panel'>", unsafe_allow_html=True)
-            st.markdown("<h3>QA Review &amp; Scoring</h3>", unsafe_allow_html=True)
-            col1, col2 = st.columns(2)
-            col1.metric(
-                "Match Rate Score",
-                st.session_state.match_score,
-                help="Scored by the QA Reviewer agent (0–100). Measures how well the tailored CV addresses the job's required skills, experience level, and company tone as extracted by the Job Analyzer agent."
-            )
-            col2.metric(
-                "Format Retained",
-                "100%",
-                help="Your original Word document template is used directly — only the bullet text inside PROFILE and RELEVANT EXPERIENCE is replaced. All fonts, margins, spacing, and structure from your original CV are preserved."
-            )
-            st.markdown(f"<b>Strong Points:</b><br>{st.session_state.strong_points}<br>", unsafe_allow_html=True)
-            st.markdown(f"<b>Pain Points:</b><br>{st.session_state.pain_points}<br>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-                
-            # Download Section
-            st.markdown("### Outputs & Downloads")
-            if st.session_state.get('docs_url'):
-                st.markdown(f"**📝 [Open Tailored CV in Google Docs]({st.session_state.docs_url})**")
-                
-            c1, c2 = st.columns(2)
-            if "cv_file_bytes" in st.session_state:
-                _cv_fname = st.session_state.get("cv_filename", "Tailored_CV.docx")
-                c1.download_button(f"⬇ {_cv_fname}", data=st.session_state.cv_file_bytes, file_name=_cv_fname, mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
-            if "cover_letter_bytes" in st.session_state:
-                _cl_fname = st.session_state.get("cl_filename", "Cover_Letter.pdf")
-                c2.download_button(f"⬇ {_cl_fname}", data=st.session_state.cover_letter_bytes, file_name=_cl_fname, mime="application/pdf", use_container_width=True)
-
-            # Keyword Matching Analysis
-            kw_data = st.session_state.get("kw_data", {})
-            if kw_data:
-                st.markdown("---")
-                with st.expander("🔑 Keyword Match Analysis (JD vs CV vs Tailored)", expanded=True):
-                    jd_kws = kw_data.get("jd", set())
-                    cv_kws = kw_data.get("cv", set())
-                    tailored_kws = kw_data.get("tailored", set())
-
-                    in_all    = sorted(jd_kws & cv_kws & tailored_kws)
-                    added     = sorted((jd_kws & tailored_kws) - cv_kws)
-                    gaps      = sorted(jd_kws - cv_kws - tailored_kws)
-                    cv_only   = sorted(cv_kws - jd_kws)
-
-                    def _badges(words, color):
-                        return " ".join(
-                            f"<span style='background:{color};border-radius:4px;padding:2px 7px;margin:2px;font-size:0.8em;display:inline-block'>{w}</span>"
-                            for w in words
-                        )
-
-                    if in_all:
-                        st.markdown("**✅ Strong matches** — in JD, original CV, and tailored CV:")
-                        st.markdown(_badges(in_all, "#1a6634"), unsafe_allow_html=True)
-                    if added:
-                        st.markdown("**🆕 Added by tailoring** — in JD and tailored CV, not in original:")
-                        st.markdown(_badges(added, "#1a4a6e"), unsafe_allow_html=True)
-                    if gaps:
-                        st.markdown("**⚠️ Gaps** — in JD but missing from both CV versions:")
-                        st.markdown(_badges(gaps, "#6e3a1a"), unsafe_allow_html=True)
-                    if cv_only:
-                        st.markdown("**ℹ️ CV-only skills** — present in your CV but not required by this JD:")
-                        st.markdown(_badges(cv_only[:20], "#3a3a3a"), unsafe_allow_html=True)
-
-                    total_jd = len(jd_kws) or 1
-                    coverage = int(100 * len(jd_kws & (cv_kws | tailored_kws)) / total_jd)
-                    st.caption(f"Keyword coverage: **{coverage}%** of JD keywords appear in the tailored CV  |  {len(jd_kws)} JD keywords analysed")
-
-            # Agent Execution Log
-            agent_outputs = st.session_state.get("agent_outputs", [])
-            if agent_outputs:
-                st.markdown("---")
-                st.markdown("### 🤖 Agent Execution Log")
-                _icons = ["🔍", "✍️", "📝", "✅"]
-                for i, out in enumerate(agent_outputs):
-                    icon = _icons[i] if i < len(_icons) else "🤖"
-                    role = out.get("role", f"Task {i+1}")
-                    raw = out.get("raw", "")
-                    pydantic_obj = out.get("pydantic")
-                    with st.expander(f"{icon} **{role}**", expanded=(i == 1)):  # CV Tailorer open by default
-                        if pydantic_obj and hasattr(pydantic_obj, '__dict__'):
-                            for field, val in pydantic_obj.__dict__.items():
-                                if field.startswith('_'):
-                                    continue
-                                if isinstance(val, list):
-                                    st.markdown(f"**{field.replace('_', ' ').title()}**")
-                                    for item in val:
-                                        st.markdown(f"- {item}")
-                                else:
-                                    st.markdown(f"**{field.replace('_', ' ').title()}:** {val}")
-                        elif raw:
-                            st.text(raw[:3000])
-                        else:
-                            st.caption("No output captured.")
-
-
-    with tab2:
-        st.markdown("<div class='glass-panel'>", unsafe_allow_html=True)
-        st.markdown("<h3>Upload New CV</h3>", unsafe_allow_html=True)
-        uploaded_file = st.file_uploader("Upload a PDF CV", type="pdf")
-        if uploaded_file is not None:
-            if st.button("Process & Add to Library"):
-                # Save PDF
-                new_pdf_path = os.path.join(docs_dir, uploaded_file.name)
-                with open(new_pdf_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                
-                # Parse to JSON
-                import pdf_parser
-                json_data = pdf_parser.parse_pdf_to_json(new_pdf_path)
-                if json_data:
-                    json_exports_dir = os.path.join(docs_dir, "json_exports")
-                    if not os.path.exists(json_exports_dir):
-                        os.makedirs(json_exports_dir)
-                    json_path = os.path.join(json_exports_dir, uploaded_file.name.replace(".pdf", ".json"))
-                    with open(json_path, 'w', encoding='utf-8') as f:
-                        json.dump(json_data, f, indent=4)
-                    st.success(f"Success! {uploaded_file.name} parsed and added to corpus.")
-                    st.rerun()
-                else:
-                    st.error("Failed to parse PDF.")
+                with open(jpath, 'r', encoding='utf-8') as f: b_json = f.read()
+                st.session_state.update({'workflow_is_running':True, 'workflow_completed':False, 'workflow_step_history':[], 'workflow_inputs':{"job_desc":st.session_state.job_desc_input, "base_cv_json_text":b_json, "company_name":st.session_state.extracted_co, "job_title":st.session_state.extracted_ti, "selected_cv_pdf":sel_cv, "selected_model":sel_model}})
+                st.session_state.workflow_generator = agent_workflow.run_application_workflow_streaming(st.session_state.job_desc_input, b_json, sel_model, company_name=st.session_state.extracted_co, job_title=st.session_state.extracted_ti)
+                st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
-        
+
+        if st.session_state.workflow_completed:
+            st.markdown("<div class='glass-panel'>", unsafe_allow_html=True)
+            st.markdown(f"<h2>Analysis Result: {st.session_state.match_score} Match</h2>", unsafe_allow_html=True)
+            if st.session_state.docs_url: st.markdown(f"#### [🔗 View in Google Docs]({st.session_state.docs_url})")
+            c_s, c_p = st.columns(2)
+            c_s.info(f"**Strong Points:**\n\n{st.session_state.strong_points.replace('<br>','\n')}")
+            c_p.warning(f"**Gaps identified:**\n\n{st.session_state.pain_points.replace('<br>','\n')}")
+            st.divider()
+            d1, d2 = st.columns(2)
+            d1.download_button("Download DOCX", st.session_state.cv_file_bytes, st.session_state.cv_filename, use_container_width=True)
+            d2.download_button("Download PDF", st.session_state.cover_letter_bytes, st.session_state.cl_filename, use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # --- AGENT EXECUTION HISTORY SECTION ---
+            st.markdown("### 🛠 Agent Pipeline Execution History")
+            st.markdown("Review the logic and comments from each individual module in the tailoring pipeline.")
+            for step in st.session_state.workflow_step_history:
+                with st.expander(f"Module {step.step_num}: {step.module_name}", expanded=False):
+                    st.write(f"**Outcome:** {step.summary}")
+                    # Render the same log window style but inline
+                    step_logs_safe = [html.escape(l) for l in step.detail_lines]
+                    step_logs_html = "".join([f'<div style="margin-bottom:8px; border-left:3px solid #0071e3; padding-left:12px; font-family:monospace; font-size:0.9rem;">{l}</div>' for l in step_logs_safe])
+                    st.markdown(f"""
+                        <div style="background:#121216; padding:1.5rem; border-radius:12px; border:1px solid rgba(255,255,255,0.05);">
+                            {step_logs_html}
+                        </div>
+                    """, unsafe_allow_html=True)
+
+    with t_lib:
         st.markdown("<div class='glass-panel'>", unsafe_allow_html=True)
-        st.markdown("<h3>Manage CV Corpus</h3>", unsafe_allow_html=True)
-        
-        for cv in available_cvs:
-            if cv == "No PDFs found in docs/":
-                continue
-            with st.expander(cv):
-                current_tags = cv_metadata.get(cv, {}).get("tags", "")
-                new_tags = st.text_input(f"Tags (comma separated) for {cv}", value=current_tags, key=f"tags_{cv}")
-                
-                col_save, col_del = st.columns(2)
-                if col_save.button("Save Tags", key=f"save_{cv}"):
-                    cv_metadata[cv] = {"tags": new_tags}
-                    with open(metadata_path, 'w', encoding='utf-8') as f:
-                        json.dump(cv_metadata, f, indent=4)
-                    st.success("Tags updated!")
-                    st.rerun()
-                    
-                if col_del.button("🗑️ Delete CV", key=f"del_{cv}"):
-                    pdf_path = os.path.join(docs_dir, cv)
-                    json_path = os.path.join(docs_dir, "json_exports", cv.replace(".pdf", ".json"))
-                    try:
-                        if os.path.exists(pdf_path): os.remove(pdf_path)
-                        if os.path.exists(json_path): os.remove(json_path)
-                        if cv in cv_metadata:
-                            del cv_metadata[cv]
-                            with open(metadata_path, 'w', encoding='utf-8') as f:
-                                json.dump(cv_metadata, f, indent=4)
-                        st.success(f"Deleted {cv}")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error deleting files: {e}")
+        st.markdown("<h3>Master Library</h3>", unsafe_allow_html=True)
+        up = st.file_uploader("Upload PDF CV", type="pdf", key="cv_up_v6")
+        if up and st.button("Index Master CV"):
+            p = os.path.join("docs", up.name)
+            with open(p, "wb") as f: f.write(up.getbuffer())
+            js = pdf_parser.parse_pdf_to_json(p)
+            os.makedirs("docs/json_exports", exist_ok=True)
+            with open(os.path.join("docs/json_exports", up.name.replace(".pdf", ".json")), "w") as f: json.dump(js, f, indent=4)
+            st.success("CV Indexed."); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
