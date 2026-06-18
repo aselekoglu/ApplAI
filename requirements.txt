@@ -6,5 +6,10 @@ python-docx
 langchain-openai
 langchain-google-genai
 pydantic
+eval_type_backport; python_version < "3.9"
 streamlit
 google-generativeai
+fastapi
+uvicorn[standard]
+python-multipart
+reportlab

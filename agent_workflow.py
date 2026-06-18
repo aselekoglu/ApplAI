@@ -112,6 +112,7 @@ class EditPlan(BaseModel):
     max_profile_bullets: int = 3
     max_experience_bullets: int = 8
     max_project_bullets: int = 4
+    max_education_bullets: int = 4
     rewrite_threshold: float = Field(description="Bullets below this score are candidates to rewrite")
     select_threshold: float = Field(description="Bullets above this score are selected as-is")
     keyword_emphasis: list[str] = Field(default_factory=list)
@@ -133,6 +134,7 @@ class TailoredOutput(BaseModel):
     skills_to_highlight: list[str] = Field(default_factory=list)
     experience_selections: list[BulletSelection] = Field(default_factory=list)
     project_selections: list[BulletSelection] = Field(default_factory=list)
+    education_selections: list[BulletSelection] = Field(default_factory=list)
     summary_section: Optional[str] = None
 
 
@@ -251,7 +253,7 @@ def _call_gemini_json(prompt: str, model_name: str = "gemini-2.5-flash") -> dict
 # Converts raw JSON {source_file, raw_text} → CanonicalCV
 # =============================================================================
 
-_CV_LOADER_PROMPT = """You are a precise CV parser. Convert the following raw CV text into a structured JSON object.
+_CV_LOADER_PROMPT_TEMPLATE = """You are a precise CV parser. Convert the following raw CV text into a structured JSON object.
 
 STRICT RULES:
 - Do NOT infer, invent, or add ANY information not present in the raw text.
@@ -260,7 +262,7 @@ STRICT RULES:
 - domain_tags for each bullet should be 1–5 lowercase tags from this list:
   [python, javascript, java, sql, api, automation, data, ml, ai, analysis, fullstack, backend,
    frontend, crm, cloud, agile, management, finance, telecom, writing, integration, testing]
-- Set is_locked=true for every bullet in experience and education sections (facts must not change).
+- {locking_rules}
 - Set is_locked=false for profile/summary bullets (these may be rewritten).
 - Generate bullet_id as: section_abbrev + "_" + index, e.g. "prof_0", "exp_0_1", "proj_1_2"
 - skills_sections: group skills by category as they appear in the CV (e.g. "Languages", "Platforms").
@@ -317,7 +319,26 @@ RAW CV TEXT:
 """
 
 
-def load_canonical_cv(raw_json: dict, model_name: str = "gemini-2.5-flash") -> CanonicalCV:
+def _build_cv_loader_prompt(raw_text: str, allow_experience_rewrites: bool, allow_education_rewrites: bool) -> str:
+    lock_exp = "false (experience bullets may be safely rephrased)" if allow_experience_rewrites else "true (facts must not change)"
+    lock_edu = "false (education bullets may be safely rephrased)" if allow_education_rewrites else "true (facts must not change)"
+    locking_rules = (
+        "Set is_locked="
+        f"{lock_exp} for every bullet in experience sections, and is_locked={lock_edu} for education bullets."
+    )
+    return (
+        _CV_LOADER_PROMPT_TEMPLATE
+        .replace("{locking_rules}", locking_rules)
+        .replace("{raw_text}", raw_text[:12000])
+    )
+
+
+def load_canonical_cv(
+    raw_json: dict,
+    model_name: str = "gemini-2.5-flash",
+    allow_experience_rewrites: bool = False,
+    allow_education_rewrites: bool = False,
+) -> CanonicalCV:
     """
     Module 1: Convert raw {source_file, raw_text} JSON into a CanonicalCV.
     Uses LLM to structure the text. Falls back to a minimal model on failure.
@@ -325,7 +346,7 @@ def load_canonical_cv(raw_json: dict, model_name: str = "gemini-2.5-flash") -> C
     raw_text = raw_json.get("raw_text", "")
     source_file = raw_json.get("source_file", "unknown")
 
-    prompt = _CV_LOADER_PROMPT.replace("{raw_text}", raw_text[:12000])
+    prompt = _build_cv_loader_prompt(raw_text, allow_experience_rewrites, allow_education_rewrites)
 
     try:
         data = _call_gemini_json(prompt, model_name)
@@ -439,6 +460,8 @@ def map_evidence(cv: CanonicalCV, jd: JDAnalysis) -> list[ScoredBullet]:
         all_bullets.extend(exp.bullets)
     for proj in cv.projects:
         all_bullets.extend(proj.bullets)
+    for edu in cv.education:
+        all_bullets.extend(edu.bullets)
 
     scored: list[ScoredBullet] = []
     for bullet in all_bullets:
@@ -483,7 +506,12 @@ def map_evidence(cv: CanonicalCV, jd: JDAnalysis) -> list[ScoredBullet]:
 # MODULE 4 — Section Strategy Planner (deterministic)
 # =============================================================================
 
-def plan_strategy(jd: JDAnalysis, scored_bullets: list[ScoredBullet]) -> EditPlan:
+def plan_strategy(
+    jd: JDAnalysis,
+    scored_bullets: list[ScoredBullet],
+    quick_mode: bool = False,
+    max_pages: int = 2,
+) -> EditPlan:
     """
     Module 4: Decide which sections to edit and how aggressively.
     Uses a deterministic rule table based on domain.
@@ -511,14 +539,19 @@ def plan_strategy(jd: JDAnalysis, scored_bullets: list[ScoredBullet]) -> EditPla
 
     # Thresholds: if good match → select as-is more; poor match → allow more rewrites
     select_threshold = 0.25 if avg_top5 > 0.35 else 0.20
-    rewrite_threshold = 0.10  # Below this AND still in top-N → candidate for rewrite
+    rewrite_threshold = 1.10 if quick_mode else 0.10  # Quick mode prefers select/deselect only
 
+    profile_cap = 3 if max_pages <= 2 else 4
+    experience_cap = 8 if max_pages <= 2 else 10
+    project_cap = 3 if max_pages <= 2 else 4
+    education_cap = 2 if max_pages <= 2 else 3
     plan = EditPlan(
         domain=domain,
         sections_to_edit=sections,
-        max_profile_bullets=3,
-        max_experience_bullets=8,
-        max_project_bullets=4,
+        max_profile_bullets=profile_cap,
+        max_experience_bullets=experience_cap,
+        max_project_bullets=project_cap,
+        max_education_bullets=education_cap,
         rewrite_threshold=rewrite_threshold,
         select_threshold=select_threshold,
         keyword_emphasis=jd.must_have_keywords[:10],
@@ -570,6 +603,7 @@ def _select_bullets_for_section(
     max_count: int,
     plan: EditPlan,
     model_name: str,
+    allow_rewrites_on_locked: bool = False,
 ) -> list[BulletSelection]:
     """Filter, rank, and optionally rewrite bullets for a given section."""
     section_bullets = [sb for sb in scored_bullets if sb.bullet.section == section]
@@ -578,7 +612,8 @@ def _select_bullets_for_section(
 
     selections: list[BulletSelection] = []
     for sb in top_bullets:
-        if sb.bullet.is_locked or sb.relevance_score >= plan.select_threshold:
+        is_locked_blocked = sb.bullet.is_locked and not allow_rewrites_on_locked
+        if is_locked_blocked or sb.relevance_score >= plan.select_threshold:
             # High relevance or locked → select as-is
             selections.append(BulletSelection(
                 bullet_id=sb.bullet.bullet_id,
@@ -622,6 +657,8 @@ def select_and_rewrite(
     plan: EditPlan,
     jd: JDAnalysis,
     model_name: str,
+    allow_experience_rewrites: bool = False,
+    allow_education_rewrites: bool = False,
 ) -> TailoredOutput:
     """Module 5: Build the TailoredOutput — select and optionally rewrite bullets."""
 
@@ -629,13 +666,26 @@ def select_and_rewrite(
         scored_bullets, "profile", plan.max_profile_bullets, plan, model_name
     )
     experience_selections = _select_bullets_for_section(
-        scored_bullets, "experience", plan.max_experience_bullets, plan, model_name
+        scored_bullets,
+        "experience",
+        plan.max_experience_bullets,
+        plan,
+        model_name,
+        allow_rewrites_on_locked=allow_experience_rewrites,
     )
     project_selections: list[BulletSelection] = []
     if "projects" in plan.sections_to_edit:
         project_selections = _select_bullets_for_section(
             scored_bullets, "projects", plan.max_project_bullets, plan, model_name
         )
+    education_selections = _select_bullets_for_section(
+        scored_bullets,
+        "education",
+        plan.max_education_bullets,
+        plan,
+        model_name,
+        allow_rewrites_on_locked=allow_education_rewrites,
+    )
 
     # Skills: pick the most relevant categories based on keyword overlap
     skills_to_highlight: list[str] = []
@@ -651,14 +701,19 @@ def select_and_rewrite(
         for skills_list in cv.skills_sections.values():
             skills_to_highlight.extend(skills_list)
 
-    selected_count = sum(1 for s in profile_selections + experience_selections + project_selections if s.action != "deselect")
-    print(f"[Selector/Rewriter] [OK] {selected_count} bullets selected/rewritten across profile, experience, projects")
+    selected_count = sum(
+        1
+        for s in profile_selections + experience_selections + project_selections + education_selections
+        if s.action != "deselect"
+    )
+    print(f"[Selector/Rewriter] [OK] {selected_count} bullets selected/rewritten across profile, experience, projects, education")
 
     return TailoredOutput(
         profile_selections=profile_selections,
         skills_to_highlight=skills_to_highlight,
         experience_selections=experience_selections,
         project_selections=project_selections,
+        education_selections=education_selections,
     )
 
 
@@ -746,9 +801,15 @@ def validate_qa(
     jd: JDAnalysis,
     ats: ATSReport,
     model_name: str,
+    max_pages: int = 2,
 ) -> QAReport:
     """Module 7: Run deterministic checks + optional LLM hallucination spot-check."""
-    all_selections = tailored.profile_selections + tailored.experience_selections + tailored.project_selections
+    all_selections = (
+        tailored.profile_selections
+        + tailored.experience_selections
+        + tailored.project_selections
+        + tailored.education_selections
+    )
     selected = [s for s in all_selections if s.action != "deselect"]
     rewritten = [s for s in all_selections if s.action == "rewrite"]
 
@@ -759,11 +820,21 @@ def validate_qa(
     # Length check
     profile_count = sum(1 for s in tailored.profile_selections if s.action != "deselect")
     exp_count = sum(1 for s in tailored.experience_selections if s.action != "deselect")
-    section_length_ok = (2 <= profile_count <= 5) and (2 <= exp_count <= 10)
+    edu_count = sum(1 for s in tailored.education_selections if s.action != "deselect")
+    profile_cap = 3 if max_pages <= 2 else 5
+    exp_cap = 8 if max_pages <= 2 else 10
+    edu_cap = 2 if max_pages <= 2 else 4
+    section_length_ok = (2 <= profile_count <= profile_cap) and (2 <= exp_count <= exp_cap) and (edu_count <= edu_cap)
     if profile_count < 2:
         style_issues.append("Profile section has fewer than 2 bullets — consider adding more.")
     if exp_count < 2:
         style_issues.append("Experience section has fewer than 2 bullets.")
+    if exp_count > exp_cap:
+        style_issues.append(f"Experience section has {exp_count} bullets (target <= {exp_cap} for {max_pages}-page CV).")
+    if profile_count > profile_cap:
+        style_issues.append(f"Profile section has {profile_count} bullets (target <= {profile_cap} for {max_pages}-page CV).")
+    if edu_count > edu_cap:
+        style_issues.append(f"Education section has {edu_count} bullets (target <= {edu_cap} for {max_pages}-page CV).")
 
     # Check for bullets that grew dramatically (possible hallucination proxy)
     for s in rewritten:
@@ -872,10 +943,18 @@ def analyze_ats(
     for exp in cv.experience:
         for b in exp.bullets:
             all_original += " " + b.text
+    for edu in cv.education:
+        for b in edu.bullets:
+            all_original += " " + b.text
     original_kw = _extract_keywords(all_original)
 
     # Tailored CV keywords
-    all_selections = tailored.profile_selections + tailored.experience_selections + tailored.project_selections
+    all_selections = (
+        tailored.profile_selections
+        + tailored.experience_selections
+        + tailored.project_selections
+        + tailored.education_selections
+    )
     tailored_text = " ".join(s.new_text or s.original_text for s in all_selections if s.action != "deselect")
     tailored_kw = _extract_keywords(tailored_text)
 
@@ -901,7 +980,12 @@ def analyze_ats(
 def generate_change_log(tailored: TailoredOutput) -> ChangeLog:
     """Module 8b: Build a structured, auditable change log from all selections."""
     entries: list[ChangeLogEntry] = []
-    all_selections = tailored.profile_selections + tailored.experience_selections + tailored.project_selections
+    all_selections = (
+        tailored.profile_selections
+        + tailored.experience_selections
+        + tailored.project_selections
+        + tailored.education_selections
+    )
     changed = 0
     rewritten_count = 0
     deselected_count = 0
@@ -948,6 +1032,13 @@ def run_application_workflow(
     model_name: str = "gemini-2.5-flash",
     company_name: str = "",
     job_title: str = "",
+    quick_mode: bool = False,
+    include_cover_letter: bool = True,
+    include_ats: bool = True,
+    include_qa: bool = True,
+    allow_experience_rewrites: bool = False,
+    allow_education_rewrites: bool = False,
+    max_pages: int = 2,
 ) -> WorkflowResult:
     """
     Full pipeline: JD text + raw CV JSON → WorkflowResult.
@@ -964,7 +1055,7 @@ def run_application_workflow(
       9. Change Log Generator → ChangeLog
     """
     print("\n" + "="*60)
-    print("  ApplAI — Starting 8-Module CV Tailoring Pipeline")
+    print("  ApplAI — Starting configurable CV tailoring pipeline")
     print("="*60)
 
     # Parse raw CV JSON
@@ -976,7 +1067,12 @@ def run_application_workflow(
 
     #  Module 1: CV Loader 
     print("\n[1/8] CV Loader...")
-    canonical_cv = load_canonical_cv(raw_json, model_name)
+    canonical_cv = load_canonical_cv(
+        raw_json,
+        model_name,
+        allow_experience_rewrites=allow_experience_rewrites,
+        allow_education_rewrites=allow_education_rewrites,
+    )
 
     #  Module 2: JD Parser 
     print("\n[2/8] JD Parser...")
@@ -988,23 +1084,37 @@ def run_application_workflow(
 
     #  Module 4: Strategy Planner 
     print("\n[4/8] Strategy Planner...")
-    edit_plan = plan_strategy(jd_analysis, scored_bullets)
+    edit_plan = plan_strategy(jd_analysis, scored_bullets, quick_mode=quick_mode, max_pages=max_pages)
 
     #  Module 5: Bullet Selector / Rewriter 
     print("\n[5/8] Bullet Selector / Rewriter...")
-    tailored_output = select_and_rewrite(canonical_cv, scored_bullets, edit_plan, jd_analysis, model_name)
+    tailored_output = select_and_rewrite(
+        canonical_cv,
+        scored_bullets,
+        edit_plan,
+        jd_analysis,
+        model_name,
+        allow_experience_rewrites=allow_experience_rewrites,
+        allow_education_rewrites=allow_education_rewrites,
+    )
 
     #  Module 6: Cover Letter Writer 
     print("\n[6/8] Cover Letter Writer...")
-    cover_letter = write_cover_letter(tailored_output, jd_analysis, canonical_cv, company_name, job_title, model_name)
+    cover_letter = ""
+    if include_cover_letter:
+        cover_letter = write_cover_letter(tailored_output, jd_analysis, canonical_cv, company_name, job_title, model_name)
 
     #  Module 7: ATS Analyzer 
     print("\n[7/8] ATS Analyzer...")
-    ats_report = analyze_ats(jd_analysis, tailored_output, canonical_cv)
+    ats_report = analyze_ats(jd_analysis, tailored_output, canonical_cv) if include_ats else ATSReport()
 
     #  Module 8: QA Validator 
     print("\n[8a/8] QA Validator...")
-    qa_report = validate_qa(tailored_output, canonical_cv, jd_analysis, ats_report, model_name)
+    qa_report = (
+        validate_qa(tailored_output, canonical_cv, jd_analysis, ats_report, model_name, max_pages=max_pages)
+        if include_qa
+        else QAReport(matching_rate_score=int(ats_report.coverage_pct) if include_ats else 0, feedback="QA checks skipped by user option.")
+    )
 
     #  Change Log 
     print("\n[8b/8] Change Log Generator...")
@@ -1049,6 +1159,13 @@ def run_application_workflow_streaming(
     model_name: str = "gemini-2.5-flash",
     company_name: str = "",
     job_title: str = "",
+    quick_mode: bool = False,
+    include_cover_letter: bool = True,
+    include_ats: bool = True,
+    include_qa: bool = True,
+    allow_experience_rewrites: bool = False,
+    allow_education_rewrites: bool = False,
+    max_pages: int = 2,
 ):
     """
     Generator version of run_application_workflow.
@@ -1069,7 +1186,7 @@ def run_application_workflow_streaming(
         logs.append(msg)
 
     _log("=" * 60)
-    _log("  ApplAI -- Starting 8-Module CV Tailoring Pipeline")
+    _log("  ApplAI -- Starting configurable CV tailoring pipeline")
     _log("=" * 60)
 
     # Parse raw JSON
@@ -1094,7 +1211,12 @@ def run_application_workflow_streaming(
     step_logs = []
     yield StepUpdate(1, TOTAL, "CV Loader", "running", "Structuring CV from raw text...", step_logs)
     try:
-        canonical_cv = load_canonical_cv(raw_json, model_name)
+        canonical_cv = load_canonical_cv(
+            raw_json,
+            model_name,
+            allow_experience_rewrites=allow_experience_rewrites,
+            allow_education_rewrites=allow_education_rewrites,
+        )
         summary = f"Loaded: {canonical_cv.full_name} | {len(canonical_cv.profile_bullets)} profile bullets | {len(canonical_cv.experience)} roles"
         step_logs = [f"[1/8] CV Loader: {summary}"]
     except Exception as e:
@@ -1140,7 +1262,7 @@ def run_application_workflow_streaming(
     step_logs = []
     yield StepUpdate(4, TOTAL, "Strategy Planner", "running", "Planning which sections to edit...", step_logs)
     try:
-        edit_plan = plan_strategy(jd_analysis, scored_bullets)
+        edit_plan = plan_strategy(jd_analysis, scored_bullets, quick_mode=quick_mode, max_pages=max_pages)
         summary = f"Domain: {edit_plan.domain} | Sections: {', '.join(edit_plan.sections_to_edit)} | select>{edit_plan.select_threshold:.2f} / rewrite>{edit_plan.rewrite_threshold:.2f}"
         step_logs = [
             f"[4/8] Strategy Planner: {summary}",
@@ -1156,8 +1278,21 @@ def run_application_workflow_streaming(
     step_logs = []
     yield StepUpdate(5, TOTAL, "Bullet Selector / Rewriter", "running", "Selecting and rewriting bullets...", step_logs)
     try:
-        tailored_output = select_and_rewrite(canonical_cv, scored_bullets, edit_plan, jd_analysis, model_name)
-        all_sel = tailored_output.profile_selections + tailored_output.experience_selections + tailored_output.project_selections
+        tailored_output = select_and_rewrite(
+            canonical_cv,
+            scored_bullets,
+            edit_plan,
+            jd_analysis,
+            model_name,
+            allow_experience_rewrites=allow_experience_rewrites,
+            allow_education_rewrites=allow_education_rewrites,
+        )
+        all_sel = (
+            tailored_output.profile_selections
+            + tailored_output.experience_selections
+            + tailored_output.project_selections
+            + tailored_output.education_selections
+        )
         selected = [s for s in all_sel if s.action != "deselect"]
         rewritten = [s for s in all_sel if s.action == "rewrite"]
         summary = f"{len(selected)} bullets selected | {len(rewritten)} rewritten | {len(all_sel)-len(selected)} dropped"
@@ -1180,54 +1315,73 @@ def run_application_workflow_streaming(
     # ── Module 6: Cover Letter Writer ────────────────────────────────────────
     step_logs = []
     yield StepUpdate(6, TOTAL, "Cover Letter Writer", "running", "Writing grounded cover letter...", step_logs)
-    try:
-        cover_letter = write_cover_letter(tailored_output, jd_analysis, canonical_cv, company_name, job_title, model_name)
-        summary = f"{len(cover_letter)} chars | {len(cover_letter.splitlines())} lines"
-        step_logs = [f"[6/8] Cover Letter Writer: {summary}", ""]
-        step_logs.extend(cover_letter.splitlines())
-    except Exception as e:
-        cover_letter = f"Cover letter generation failed: {e}"
-        summary = f"Cover Letter Writer failed: {e}"
-        step_logs = [f"[6/8] Cover Letter ERROR: {e}"]
+    if include_cover_letter:
+        try:
+            cover_letter = write_cover_letter(tailored_output, jd_analysis, canonical_cv, company_name, job_title, model_name)
+            summary = f"{len(cover_letter)} chars | {len(cover_letter.splitlines())} lines"
+            step_logs = [f"[6/8] Cover Letter Writer: {summary}", ""]
+            step_logs.extend(cover_letter.splitlines())
+        except Exception as e:
+            cover_letter = f"Cover letter generation failed: {e}"
+            summary = f"Cover Letter Writer failed: {e}"
+            step_logs = [f"[6/8] Cover Letter ERROR: {e}"]
+    else:
+        cover_letter = ""
+        summary = "Skipped by user option."
+        step_logs = ["[6/8] Cover Letter Writer: skipped"]
     yield StepUpdate(6, TOTAL, "Cover Letter Writer", "done", summary, step_logs, payload=cover_letter)
 
     # ── Module 7: ATS Analyzer ───────────────────────────────────────────────
     step_logs = []
     yield StepUpdate(7, TOTAL, "ATS Analyzer", "running", "Computing keyword coverage...", step_logs)
-    try:
-        ats_report = analyze_ats(jd_analysis, tailored_output, canonical_cv)
-        summary = f"Coverage: {ats_report.coverage_pct:.1f}% | {len(ats_report.covered_keywords)} covered | {len(ats_report.gap_keywords)} gaps"
-        step_logs = [
-            f"[7/8] ATS Analyzer: {summary}",
-            f"      Covered: {', '.join(ats_report.covered_keywords[:10])}",
-            f"      Gaps:    {', '.join(ats_report.gap_keywords[:10])}",
-        ]
-        if ats_report.added_by_tailoring:
-            step_logs.append(f"      Added by tailoring: {', '.join(ats_report.added_by_tailoring[:8])}")
-    except Exception as e:
-        summary = f"ATS Analyzer failed: {e}"
-        step_logs = [f"[7/8] ATS Analyzer ERROR: {e}"]
+    if include_ats:
+        try:
+            ats_report = analyze_ats(jd_analysis, tailored_output, canonical_cv)
+            summary = f"Coverage: {ats_report.coverage_pct:.1f}% | {len(ats_report.covered_keywords)} covered | {len(ats_report.gap_keywords)} gaps"
+            step_logs = [
+                f"[7/8] ATS Analyzer: {summary}",
+                f"      Covered: {', '.join(ats_report.covered_keywords[:10])}",
+                f"      Gaps:    {', '.join(ats_report.gap_keywords[:10])}",
+            ]
+            if ats_report.added_by_tailoring:
+                step_logs.append(f"      Added by tailoring: {', '.join(ats_report.added_by_tailoring[:8])}")
+        except Exception as e:
+            summary = f"ATS Analyzer failed: {e}"
+            step_logs = [f"[7/8] ATS Analyzer ERROR: {e}"]
+            ats_report = ATSReport()
+    else:
         ats_report = ATSReport()
+        summary = "Skipped by user option."
+        step_logs = ["[7/8] ATS Analyzer: skipped"]
     yield StepUpdate(7, TOTAL, "ATS Analyzer", "done", summary, step_logs, payload=ats_report)
 
     # ── Module 8: QA Validator ───────────────────────────────────────────────
     step_logs = []
     yield StepUpdate(8, TOTAL, "QA Validator + Change Log", "running", "Running quality checks and building change log...", step_logs)
     try:
-        qa_report = validate_qa(tailored_output, canonical_cv, jd_analysis, ats_report, model_name)
+        if include_qa:
+            qa_report = validate_qa(tailored_output, canonical_cv, jd_analysis, ats_report, model_name, max_pages=max_pages)
+        else:
+            qa_report = QAReport(
+                matching_rate_score=int(ats_report.coverage_pct) if include_ats else 0,
+                feedback="QA checks skipped by user option.",
+            )
         change_log = generate_change_log(tailored_output)
         summary = f"Match score: {qa_report.matching_rate_score}% | Issues: {len(qa_report.style_issues)} | Unsupported: {len(qa_report.unsupported_claims)} | {change_log.total_bullets_rewritten} bullets rewritten"
         step_logs = [
             f"[8/8] QA Validator: Score={qa_report.matching_rate_score}% | Factual OK={qa_report.factual_support_passed}",
         ]
-        if qa_report.style_issues:
+        if include_qa and qa_report.style_issues:
             for issue in qa_report.style_issues:
                 step_logs.append(f"      Issue: {issue}")
-        if qa_report.unsupported_claims:
+        if include_qa and qa_report.unsupported_claims:
             for claim in qa_report.unsupported_claims:
                 step_logs.append(f"      Unsupported claim: {claim}")
-        step_logs.append(f"      Strong: {', '.join(qa_report.strong_points[:3])}")
-        step_logs.append(f"      Pain:   {', '.join(qa_report.key_pain_points[:3])}")
+        if include_qa:
+            step_logs.append(f"      Strong: {', '.join(qa_report.strong_points[:3])}")
+            step_logs.append(f"      Pain:   {', '.join(qa_report.key_pain_points[:3])}")
+        else:
+            step_logs.append("      QA checks skipped by user option.")
         step_logs.append(f"[8b]  Change Log: {change_log.total_bullets_considered} bullets | {change_log.total_bullets_rewritten} rewritten | {change_log.total_bullets_deselected} dropped")
     except Exception as e:
         summary = f"QA/Change Log failed: {e}"

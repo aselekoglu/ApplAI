@@ -1,6 +1,12 @@
 # Environment and Secrets
 .env
 *.json
+!web/package.json
+!web/package-lock.json
+!web/tsconfig.json
+!web/tsconfig.node.json
+!eve/package.json
+!eve/tsconfig.json
 !requirements.txt
 google_credentials.json
 google_oauth_credentials.json
@@ -27,3 +33,12 @@ docs/*.docx
 Thumbs.db
 scripts/cleanup_ports.ps1
 tests/test_agent_logic.py
+
+# Tooling / build outputs
+.venv/
+web/node_modules/
+web/dist/
+web/.npm-cache/
+*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts

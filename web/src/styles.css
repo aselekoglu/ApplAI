@@ -1,0 +1,697 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0f1115;
+  color: #e6e9ef;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  border: 1px solid #2e3642;
+  border-radius: 10px;
+  background: #1a2029;
+  color: #e6e9ef;
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+input,
+textarea,
+select {
+  border: 1px solid #2e3642;
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  background: #10151d;
+  color: #e6e9ef;
+  width: 100%;
+}
+
+pre {
+  background: #111821;
+  border-radius: 8px;
+  border: 1px solid #2e3642;
+  padding: 0.8rem;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.layout {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.layout--wide {
+  max-width: min(1480px, 100vw - 1.5rem);
+}
+
+.btnPrimary {
+  background: linear-gradient(180deg, #2b6fd6 0%, #1e5bb8 100%);
+  border-color: #3d7fe0;
+  font-weight: 600;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.masterStudioPage {
+  gap: 1.25rem;
+}
+
+.masterStudioTop h2,
+.masterStudioTop h3 {
+  margin: 0 0 0.2rem;
+}
+
+.masterStudioNote {
+  margin: 0;
+}
+
+/* --- Master document studio (Google Docs–style page + VMock-style section rail) --- */
+
+.docStudio {
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  min-height: min(72vh, 820px);
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #2a3344;
+  background: #141922;
+}
+
+.docStudio--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  min-height: 200px;
+}
+
+.docStudioRail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem 0.85rem 1rem 1rem;
+  background: linear-gradient(180deg, #151a22 0%, #10151c 100%);
+  border-right: 1px solid #263040;
+  outline: none;
+}
+
+.docStudioRail:focus-visible {
+  box-shadow: inset 0 0 0 2px #3d6fb8;
+}
+
+.docStudioRailHead {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.docStudioRailTitle {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9fb3cc;
+}
+
+.docStudioRailSub {
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.docStudioRailHint {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.docStudioRailList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.docStudioRailBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Hover zone between sections: centered round + (VMock-style insert) */
+.docStudioRailInsert {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 4px;
+  margin: 0;
+  transition: min-height 0.18s ease;
+}
+
+.docStudioRailInsert::before {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 50%;
+  height: 1px;
+  background: #3d4d63;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.docStudioRailInsert:hover,
+.docStudioRailInsert:focus-within {
+  min-height: 26px;
+}
+
+.docStudioRailInsert:hover::before,
+.docStudioRailInsert:focus-within::before {
+  opacity: 0.85;
+}
+
+.docStudioRailInsertBtn {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  border: 1px solid #4d8bd9;
+  background: linear-gradient(180deg, #2f4a6e 0%, #24364d 100%);
+  color: #e8f2ff;
+  font-weight: 600;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.88);
+  pointer-events: none;
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.docStudioRailInsert:hover .docStudioRailInsertBtn,
+.docStudioRailInsert:focus-within .docStudioRailInsertBtn {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.docStudioRailInsertBtn:hover:not(:disabled),
+.docStudioRailInsertBtn:focus-visible:not(:disabled) {
+  filter: brightness(1.12);
+  box-shadow: 0 0 0 2px rgba(77, 139, 217, 0.45);
+}
+
+.docStudioRailInsertBtn:focus-visible {
+  outline: none;
+}
+
+.docStudioRailItem {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #2c3545;
+  border-radius: 10px;
+  background: #161d28;
+  cursor: pointer;
+  color: inherit;
+  overflow: hidden;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.docStudioRailItem:hover {
+  background: #1a2330;
+  border-color: #3a4a62;
+}
+
+.docStudioRailItem.is-active {
+  background: #1e2838;
+  border-color: #4d8bd9;
+  box-shadow: 0 0 0 1px rgba(77, 139, 217, 0.35);
+}
+
+.docStudioKindBar {
+  width: 5px;
+  flex-shrink: 0;
+  background: #5c6575;
+}
+
+.docStudioKindBar--profile {
+  background: #5b8def;
+}
+.docStudioKindBar--experience_block {
+  background: #b07cff;
+}
+.docStudioKindBar--education {
+  background: #5bd4a8;
+}
+.docStudioKindBar--skills {
+  background: #f0b429;
+}
+.docStudioKindBar--projects {
+  background: #4dd4e8;
+}
+.docStudioKindBar--other {
+  background: #8b95a8;
+}
+
+.docStudioRailItemBody {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem 0.65rem 0.6rem 0.6rem;
+  min-width: 0;
+}
+
+.docStudioRailKind {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8ea0b8;
+}
+
+.docStudioRailHeading {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #e8eef7;
+}
+
+.docStudioRailPreview {
+  font-size: 0.72rem;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.docStudioDesk {
+  background: linear-gradient(165deg, #5f6670 0%, #4a5058 40%, #3d434a 100%);
+  overflow: auto;
+  min-height: 0;
+}
+
+.docStudioDeskInner {
+  padding: 1.25rem 1rem 2.5rem;
+  min-height: 100%;
+}
+
+.docStudioToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  max-width: 51rem;
+  margin: 0 auto 0.75rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.docStudioToolbarKind {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.docStudioToolbarKind select {
+  width: auto;
+  min-width: 10rem;
+  background: #2a313c;
+  color: #e6e9ef;
+  border-radius: 8px;
+}
+
+.docStudioToolbarMeta {
+  font-size: 0.8rem;
+}
+
+.docStudioPage {
+  display: flex;
+  flex-direction: column;
+  max-width: 51rem;
+  margin: 0 auto;
+  background: #fafbfd;
+  color: #1a1d24;
+  border-radius: 3px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.14),
+    0 4px 22px rgba(0, 0, 0, 0.22);
+  padding: 2.25rem 2.75rem 2.5rem;
+  min-height: 52rem;
+  position: relative;
+  border-left: 4px solid transparent;
+}
+
+.docStudioPage--accent-profile {
+  border-left-color: #5b8def;
+}
+.docStudioPage--accent-experience_block {
+  border-left-color: #b07cff;
+}
+.docStudioPage--accent-education {
+  border-left-color: #5bd4a8;
+}
+.docStudioPage--accent-skills {
+  border-left-color: #f0b429;
+}
+.docStudioPage--accent-projects {
+  border-left-color: #4dd4e8;
+}
+.docStudioPage--accent-other {
+  border-left-color: #8b95a8;
+}
+
+.docStudioRuler {
+  height: 10px;
+  margin: -0.5rem -0.5rem 1.25rem;
+  border-radius: 2px 2px 0 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 7px,
+    rgba(0, 0, 0, 0.06) 7px,
+    rgba(0, 0, 0, 0.06) 8px
+  );
+  opacity: 0.5;
+}
+
+.docStudioField {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 1.1rem;
+}
+
+.docStudioField--flush {
+  margin-bottom: 1.25rem;
+}
+
+.docStudioField--grow {
+  margin-bottom: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.docStudioFieldLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5c6575;
+}
+
+.docStudioPage .docStudioFieldLabel {
+  color: #6a7380;
+}
+
+.docStudioTitleInput {
+  width: 100%;
+  border: none;
+  border-bottom: 2px solid #dfe4ec;
+  border-radius: 0;
+  background: transparent;
+  color: #111827;
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  padding: 0.2rem 0 0.5rem;
+  line-height: 1.2;
+}
+
+.docStudioTitleInput:focus {
+  outline: none;
+  border-bottom-color: #3b7ddd;
+}
+
+.docStudioMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.1rem;
+  background: #f0f3f8;
+  border-radius: 10px;
+  border: 1px solid #e2e7f0;
+}
+
+.docStudioPage input,
+.docStudioPage textarea {
+  background: #ffffff;
+  color: #1a1d24;
+  border: 1px solid #cfd6e3;
+  border-radius: 8px;
+}
+
+.docStudioPage input:focus,
+.docStudioPage textarea:focus {
+  border-color: #4d8bd9;
+  box-shadow: 0 0 0 3px rgba(77, 139, 217, 0.2);
+}
+
+.docStudioBody {
+  width: 100%;
+  flex: 1;
+  min-height: 28rem;
+  resize: vertical;
+  font-family: "Georgia", "Times New Roman", serif;
+  font-size: 0.98rem;
+  line-height: 1.72;
+  padding: 0.85rem 1rem;
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 960px) {
+  .docStudio {
+    grid-template-columns: 1fr;
+    min-height: unset;
+  }
+
+  .docStudioRail {
+    border-right: none;
+    border-bottom: 1px solid #263040;
+    max-height: 280px;
+  }
+
+  .docStudioMetaGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.topbar h1 {
+  margin: 0;
+}
+
+.navlinks {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.navlinks a {
+  color: #9fb3cc;
+  text-decoration: none;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+}
+
+.navlinks a.active {
+  color: #ffffff;
+  background: #213040;
+}
+
+.page {
+  display: grid;
+}
+
+.stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.stack.compact {
+  gap: 0.35rem;
+}
+
+.card {
+  border: 1px solid #263040;
+  border-radius: 12px;
+  background: #161c24;
+  padding: 1rem;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.row.spread {
+  justify-content: space-between;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field.checkbox {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.muted {
+  color: #8ea0b8;
+}
+
+.error {
+  color: #ff9f9f;
+}
+
+.pill {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid #415a7a;
+  color: #adc2db;
+}
+
+.simpleList {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.linkButton {
+  background: transparent;
+  border: 0;
+  color: #8ab4ff;
+  text-align: left;
+  padding: 0;
+}
+
+.masterList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.masterListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid #263040;
+  background: #121820;
+}
+
+.masterListItem code,
+.masterListItem strong {
+  font-size: 0.95rem;
+}
+
+code {
+  font-size: 0.85em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 6px;
+  background: #111821;
+  border: 1px solid #2e3642;
+}
+
+h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+@media (max-width: 900px) {
+  .grid2,
+  .grid3 {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .masterListItem {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

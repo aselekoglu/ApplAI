@@ -1,9 +1,42 @@
+from __future__ import annotations
+
 import os
 import re
+import json
 from docx import Document
 
 
-def generate_tailored_document(template_path: str, output_path: str, tailored_data: dict):
+def _load_template_config(template_config):
+    if not template_config:
+        return {}
+    if isinstance(template_config, dict):
+        return template_config
+    if isinstance(template_config, str) and os.path.exists(template_config):
+        try:
+            with open(template_config, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as exc:
+            print(f"[Renderer] Failed to read template config ({exc}).")
+            return {}
+    return {}
+
+
+def _resolve_headers(config: dict, key: str, defaults: list[str]) -> list[str]:
+    headers = config.get(key, defaults)
+    if isinstance(headers, str):
+        return [headers]
+    if isinstance(headers, list):
+        return [h for h in headers if isinstance(h, str) and h.strip()]
+    return defaults
+
+
+def generate_tailored_document(
+    template_path: str,
+    output_path: str,
+    tailored_data: dict,
+    template_config=None,
+    max_pages: int = 2,
+):
     """
     Injects tailored CV content into a DOCX template.
 
@@ -21,11 +54,17 @@ def generate_tailored_document(template_path: str, output_path: str, tailored_da
         print(f"Template not found: {template_path}")
         return False
 
+    merged_config = _load_template_config(template_config or tailored_data.get("template_config"))
+    if isinstance(tailored_data.get("template_config"), dict):
+        merged_config = {**merged_config, **tailored_data.get("template_config", {})}
+
     doc = Document(template_path)
 
     #  Resolve bullet lists from either format 
     profile_bullets: list[str] = []
     experience_highlights: list[str] = []
+    education_highlights: list[str] = []
+    project_highlights: list[str] = []
     skills_to_highlight: list[str] = []
 
     tailored_obj = tailored_data.get("tailored_output")
@@ -41,11 +80,23 @@ def generate_tailored_document(template_path: str, output_path: str, tailored_da
             for s in tailored_obj.experience_selections
             if s.action != "deselect" and (s.new_text or s.original_text)
         ]
+        education_highlights = [
+            s.new_text or s.original_text
+            for s in getattr(tailored_obj, "education_selections", [])
+            if s.action != "deselect" and (s.new_text or s.original_text)
+        ]
+        project_highlights = [
+            s.new_text or s.original_text
+            for s in getattr(tailored_obj, "project_selections", [])
+            if s.action != "deselect" and (s.new_text or s.original_text)
+        ]
         skills_to_highlight = tailored_obj.skills_to_highlight or []
     else:
         # Legacy format
         profile_bullets = tailored_data.get("profile_bullets", [])
         experience_highlights = tailored_data.get("experience_highlights", [])
+        education_highlights = tailored_data.get("education_highlights", [])
+        project_highlights = tailored_data.get("project_highlights", [])
         skills_to_highlight = tailored_data.get("skills_to_highlight", [])
 
         tailored_raw = tailored_data.get("tailored_raw", "")
@@ -61,23 +112,35 @@ def generate_tailored_document(template_path: str, output_path: str, tailored_da
                 experience_highlights = [l for l in lines if len(l) > 5]
 
     #  Inject sections 
+    profile_headers = _resolve_headers(merged_config, "profile_headers", ["PROFILE"])
+    experience_headers = _resolve_headers(merged_config, "experience_headers", ["RELEVANT EXPERIENCE"])
+    education_headers = _resolve_headers(merged_config, "education_headers", ["EDUCATION"])
+    project_headers = _resolve_headers(merged_config, "project_headers", ["PROJECTS", "PROJECT EXPERIENCE"])
+    skill_headers = _resolve_headers(merged_config, "skills_headers", ["SUMMARY OF QUALIFICATIONS", "KEY SKILLS", "SKILLS", "TECHNICAL SKILLS"])
+
     if profile_bullets:
-        _replace_section_bullets(doc, "PROFILE", profile_bullets)
+        _replace_first_matching_section(doc, profile_headers, profile_bullets)
 
     if experience_highlights:
-        _replace_section_bullets(doc, "RELEVANT EXPERIENCE", experience_highlights)
+        _replace_sections_in_order(doc, experience_headers, experience_highlights)
+
+    if education_highlights:
+        _replace_first_matching_section(doc, education_headers, education_highlights)
+
+    if project_highlights:
+        _replace_first_matching_section(doc, project_headers, project_highlights)
 
     # Skills: try common section header variants
     if skills_to_highlight:
-        for header in ["SUMMARY OF QUALIFICATIONS", "KEY SKILLS", "SKILLS", "TECHNICAL SKILLS"]:
-            if _section_exists(doc, header):
-                _replace_section_bullets(doc, header, skills_to_highlight)
-                break
+        _replace_first_matching_section(doc, skill_headers, skills_to_highlight)
+
+    _apply_layout_guards(doc, profile_headers + experience_headers + education_headers + project_headers + skill_headers)
 
     # Overflow check
     total_paras = sum(1 for p in doc.paragraphs if p.text.strip())
-    if total_paras > 80:
-        print(f"[Renderer]  Overflow risk: {total_paras} non-empty paragraphs — consider trimming bullets.")
+    max_paragraphs = 80 if max_pages <= 2 else 120
+    if total_paras > max_paragraphs:
+        print(f"[Renderer]  Overflow risk: {total_paras} non-empty paragraphs (target <= {max_paragraphs}).")
 
     try:
         doc.save(output_path)
@@ -126,7 +189,7 @@ def _replace_section_bullets(doc, section_header: str, new_bullets: list):
 
     if header_idx is None:
         print(f"[Renderer] Section '{section_header}' not found in document.")
-        return
+        return False
 
     # Collect bullet paragraphs after the header.
     # In this DOCX all paragraphs use style='normal'. The ONLY reliable
@@ -161,7 +224,7 @@ def _replace_section_bullets(doc, section_header: str, new_bullets: list):
 
     if not bullet_indices:
         print(f"[Renderer] No bullet paragraphs found under '{section_header}'.")
-        return
+        return False
 
     print(f"[Renderer] Replacing {min(len(bullet_indices), len(new_bullets))} bullets under '{section_header}'")
 
@@ -187,6 +250,57 @@ def _replace_section_bullets(doc, section_header: str, new_bullets: list):
             first_run.italic = italic
         else:
             para.text = clean_text
+    return True
+
+
+def _replace_first_matching_section(doc, headers: list[str], new_bullets: list):
+    for header in headers:
+        if _section_exists(doc, header):
+            if _replace_section_bullets(doc, header, new_bullets):
+                return True
+    print(f"[Renderer] None of these headers were found: {headers}")
+    return False
+
+
+def _replace_sections_in_order(doc, headers: list[str], new_bullets: list):
+    """
+    Replace bullet slots across multiple matching section headers.
+    This helps keep multi-role experience blocks from collapsing into one list.
+    """
+    valid_headers = [h for h in headers if _section_exists(doc, h)]
+    if not valid_headers:
+        print(f"[Renderer] None of these headers were found: {headers}")
+        return False
+    if not new_bullets:
+        return True
+
+    chunk_size = max(1, (len(new_bullets) + len(valid_headers) - 1) // len(valid_headers))
+    replaced_any = False
+    cursor = 0
+    for header in valid_headers:
+        chunk = new_bullets[cursor:cursor + chunk_size]
+        if not chunk:
+            break
+        replaced = _replace_section_bullets(doc, header, chunk)
+        replaced_any = replaced_any or replaced
+        cursor += chunk_size
+    return replaced_any
+
+
+def _apply_layout_guards(doc, section_headers: list[str]):
+    """
+    Keep section headers attached to the next paragraph to reduce split blocks
+    when the CV is close to page boundaries.
+    """
+    for idx, para in enumerate(doc.paragraphs):
+        text = para.text.strip()
+        if not text:
+            continue
+        if any(h.upper() in text.upper() for h in section_headers):
+            para.paragraph_format.keep_with_next = True
+            para.paragraph_format.widow_control = True
+            if idx + 1 < len(doc.paragraphs):
+                doc.paragraphs[idx + 1].paragraph_format.widow_control = True
 
 
 if __name__ == "__main__":
