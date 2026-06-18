@@ -31,7 +31,7 @@ Remaining:
 
 ## Phase 0.5 - Eve Spike And Boundary Proof
 
-Status: implemented; one dependency/tooling blocker remains.
+Status: implemented.
 
 Purpose:
 
@@ -55,12 +55,15 @@ Exit criteria:
 
 Known blocker:
 
-- `npm run typecheck` in `eve/` is blocked until dependencies install `tsc`.
 - Vercel Eve public docs do not yet show a stable custom workflow file API. Keep workflow files as typed local adapters until Vercel documents runtime conventions.
+
+Runtime caveat:
+
+- Eve `0.11.4` declares Node `>=24`. Static typecheck passes after Sprint 1 dependency setup, but Eve runtime work should use Node 24+.
 
 ## Phase 1 - Career Brain And Tailored Examples
 
-Status: next active phase.
+Status: implemented.
 
 Purpose:
 
@@ -68,14 +71,14 @@ Purpose:
 
 Core work:
 
-- Career Brain schema.
-- Evidence blocks with provenance and truth constraints.
-- Project, skill, experience, and preference records.
-- Tailored examples importer for `docs/tailored_examples/`.
-- Master-vs-tailored diff to extract observed decisions.
-- Core API routes for profile and examples.
-- Eve tools for profile/example retrieval.
-- Resolve or document Eve TypeScript dependency setup before relying on `npm run typecheck`.
+- Career Brain schema: delivered.
+- Evidence blocks with provenance and truth constraints: delivered in schema.
+- Project, skill, experience, and preference records: delivered in schema.
+- Tailored examples importer for `docs/tailored_examples/`: delivered.
+- Master-vs-tailored diff scaffold: delivered.
+- Core API routes for profile and examples: delivered.
+- Eve tools for profile/example retrieval: delivered.
+- Eve TypeScript dependency setup: delivered; Node 24 remains runtime caveat.
 
 Exit criteria:
 
@@ -84,6 +87,8 @@ Exit criteria:
 - Historical examples can inform role-family calibration.
 
 ## Phase 2 - Job Intake And Scoring
+
+Status: next active phase.
 
 Purpose:
 
@@ -96,6 +101,8 @@ Core work:
 - Hybrid scoring: keyword, semantic, role fit, seniority, location, work authorization, career value, effort.
 - Recommendation output: `apply`, `skip`, or `worth_20_minutes`.
 - Eve `score_job` tool connected to real scoring service. The first Core endpoint now exists; this phase upgrades it from keyword heuristic to Career Brain-backed evidence scoring.
+- Evidence matching should use Career Brain evidence blocks and return top evidence block IDs plus missing keyword/evidence gaps.
+- Scored jobs should be saved as draft records under `docs/jobs/`.
 
 Exit criteria:
 

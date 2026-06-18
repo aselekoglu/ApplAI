@@ -13,6 +13,12 @@ This workspace is the Sprint 0.5 Eve orchestration boundary. The goal is to keep
 
 Official Vercel Eve docs confirm the agent directory shape, Markdown instructions/skills, TypeScript tools via `defineTool`, and `needsApproval` on tools. The public docs do not yet show a stable custom workflow file API beyond schedules/evals/tool files, so `workflows/score_job.workflow.ts` is intentionally written as a typed local adapter. Once Eve exposes or documents workflow module conventions, wire this file into the runtime without moving the scoring logic into Eve prompts.
 
+## TypeScript setup
+
+`npm install` now installs the documented Eve dependencies (`eve`, `ai`, and `zod`) plus local TypeScript tooling. `npm run typecheck` passes after install.
+
+Eve `0.11.4` declares Node `>=24`. The Sprint 1 verification shell was Node `v22.22.3`, so npm prints an `EBADENGINE` warning even though `tsc --noEmit` succeeds. Use Node 24 or newer before relying on the Eve runtime beyond static typechecking.
+
 ## Local run assumptions
 
 Set `APPLAI_CORE_API_URL` if the FastAPI Core API is not running at `http://127.0.0.1:8000`.

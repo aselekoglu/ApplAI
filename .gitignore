@@ -6,6 +6,7 @@
 !web/tsconfig.json
 !web/tsconfig.node.json
 !eve/package.json
+!eve/package-lock.json
 !eve/tsconfig.json
 !requirements.txt
 google_credentials.json
@@ -37,6 +38,7 @@ tests/test_agent_logic.py
 # Tooling / build outputs
 .venv/
 web/node_modules/
+eve/node_modules/
 web/dist/
 web/.npm-cache/
 *.tsbuildinfo

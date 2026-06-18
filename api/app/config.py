@@ -39,5 +39,13 @@ class Settings:
     def runs_dir(self) -> str:
         return os.path.join(self.docs_dir, self.runs_subdir)
 
+    @property
+    def career_brain_dir(self) -> str:
+        return os.path.join(self.docs_dir, "career_brain")
+
+    @property
+    def tailored_examples_dir(self) -> str:
+        return os.path.join(self.docs_dir, "tailored_examples")
+
 
 settings = Settings()

@@ -9,7 +9,8 @@ Last updated: 2026-06-18
 - [x] Industry research added for Teal, Rezi, Huntr, Simplify, Enhancv, Resume.io, Kickresume, and AIApply.
 - [x] Eve-first orchestration decision added to the master plan.
 - [x] Sprint 0.5 Eve spike implemented in a separate agent window.
-- [ ] Sprint 1 Career Brain + Tailored Examples is next.
+- [x] Sprint 1 Career Brain + Tailored Examples foundation implemented.
+- [ ] Sprint 2 Job Intake + Career Brain-backed Scoring is next.
 
 ## Completed Sprint: Sprint 0.5 - Eve Spike And Boundary Proof
 
@@ -54,36 +55,74 @@ Verification reported by implementation agent:
 - [x] `python3 -c "import api.app.main; print(api.app.main.app.title)"` passed.
 - [x] FastAPI `POST /jobs/score` smoke returned `200`, recommendation `apply`, score `96`.
 - [x] `npm test` in `eve/` passed approval policy tests.
-- [ ] `npm run typecheck` in `eve/` is blocked until Eve workspace dependencies install `tsc`.
+- [x] `npm run typecheck` in `eve/` now passes after Sprint 1 dependency setup.
 
 Known blocker:
 
 - Official Eve docs currently document agent directory shape, `defineTool`, skills, and `needsApproval`, but not a stable custom workflow file API. `eve/workflows/score_job.workflow.ts` is therefore a typed local adapter until Vercel documents workflow module conventions.
 
-## Active Sprint: Sprint 1 - Career Brain And Tailored Examples
+Runtime caveat:
+
+- Eve `0.11.4` declares Node `>=24`; the current shell is Node `v22.22.3`, so runtime work should use Node 24+ even though static typecheck passes.
+
+## Completed Sprint: Sprint 1 - Career Brain And Tailored Examples
 
 Goal: turn Ata's master CV, skills, projects, and tailored historical PDFs into structured evidence that scoring and tailoring can use.
 
 Recommended order:
 
-- [ ] Review Sprint 0.5 changed files in detail before layering more work.
-- [ ] Install or document Eve workspace dependencies so `npm run typecheck` can run.
-- [ ] Add `CareerBrainProfile`, `EvidenceBlock`, `ExperienceRecord`, `ProjectRecord`, `SkillInventory`, and preference schemas.
-- [ ] Add JSON-backed `career_brain_service`.
-- [ ] Add `/career-brain` FastAPI route.
-- [ ] Add tests for Career Brain seeding and profile retrieval.
-- [ ] Add tailored examples schemas.
-- [ ] Implement tailored PDF discovery for `docs/tailored_examples/`.
-- [ ] Extract page count, PDF title, filename role label, text, and section headings.
-- [ ] Add tests proving all 20 PDFs are discovered and each has `page_count == 2`.
-- [ ] Add a first master-vs-example diff classifier.
-- [ ] Add Eve tool contract for reading Career Brain profile.
-- [ ] Add Eve tool contract for listing tailored examples.
+- [x] Review Sprint 0.5 changed files in detail before layering more work.
+- [x] Install or document Eve workspace dependencies so `npm run typecheck` can run.
+- [x] Add `CareerBrainProfile`, `EvidenceBlock`, `ExperienceRecord`, `ProjectRecord`, `SkillInventory`, and preference schemas.
+- [x] Add JSON-backed `career_brain_service`.
+- [x] Add `/career-brain` FastAPI route.
+- [x] Add tests for Career Brain seeding and profile retrieval.
+- [x] Add tailored examples schemas.
+- [x] Implement tailored PDF discovery for `docs/tailored_examples/`.
+- [x] Extract page count, PDF title, filename role label, text, and section headings.
+- [x] Add tests proving all 20 PDFs are discovered and each has `page_count == 2`.
+- [x] Add a first master-vs-example diff classifier.
+- [x] Add Eve tool contract for reading Career Brain profile.
+- [x] Add Eve tool contract for listing tailored examples.
+
+Sprint 1 verification notes:
+
+- [x] `python3 -m unittest discover -s tests -p 'test_*.py'` passed.
+- [x] `python3 -c "import api.app.main; print(api.app.main.app.title)"` passed.
+- [x] `npm test` in `eve/` passed approval policy tests.
+- [x] `npm run typecheck` in `eve/` passed after installing Eve dependencies.
+- [ ] Eve runtime execution still needs Node `>=24`; local verification used Node `v22.22.3`, which prints npm `EBADENGINE` warnings for `eve@0.11.4`.
+- [x] No private PDF-derived JSON was generated or committed; tailored examples parse on demand from local PDFs.
+
+## Active Sprint: Sprint 2 - Job Intake And Career Brain-backed Scoring
+
+Goal: upgrade the first keyword-only scoring path into a persisted job intake and evidence-aware scoring workflow.
+
+Recommended order:
+
+- [ ] Review Sprint 1 changed files before layering more work.
+- [ ] Add `docs/jobs/` local persistence service for job records.
+- [ ] Add `JobRecord` persistence fields for raw JD, company, title, source URL, parsed requirements, score report, recommendation, and timestamps.
+- [ ] Extend `POST /jobs/score` or add `POST /jobs/import` so scored jobs can be saved as drafts.
+- [ ] Parse job descriptions into responsibilities, qualifications, keywords, seniority, domain, location/remote hints, and effort signals.
+- [ ] Load Career Brain evidence blocks during scoring.
+- [ ] Score JD requirements against evidence blocks, role preferences, technologies, and skill categories.
+- [ ] Return top evidence block IDs and missing evidence/keyword gaps.
+- [ ] Keep recommendations limited to `apply`, `skip`, or `worth_20_minutes`.
+- [ ] Update Eve `score_job` contract/adapter if Core response shape changes.
+- [ ] Add tests for persisted job records and Career Brain-backed evidence scoring.
+- [ ] Keep `npm test` and `npm run typecheck` passing in `eve/`.
+- [ ] Do not introduce submit/publish/send/upload/ready-to-submit actions without approval.
 
 ## Near-Term Backlog
 
 - [x] Implement first job scoring service and route.
 - [x] Connect Eve `score_job` tool to Core scoring endpoint.
+- [x] Implement Career Brain Pydantic schemas.
+- [x] Implement JSON-backed Career Brain service.
+- [x] Add `/career-brain` FastAPI route.
+- [x] Implement tailored examples importer for `docs/tailored_examples/`.
+- [x] Add tests for PDF discovery, page count, heading extraction, and master-vs-example diff.
 - [ ] Add persisted job records under `docs/jobs/`.
 - [ ] Add approval service and approval event persistence.
 - [ ] Expand scoring from initial keyword heuristic to Career Brain evidence scoring.

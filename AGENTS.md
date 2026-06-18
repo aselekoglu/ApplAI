@@ -39,7 +39,7 @@ ApplAI is moving to an Eve-first orchestration model.
 
 Current active build target:
 
-`Sprint 1 - Career Brain And Tailored Examples`
+`Sprint 2 - Job Intake And Career Brain-backed Scoring`
 
 Sprint 0.5 has been implemented:
 
@@ -53,16 +53,27 @@ Known Eve blocker:
 
 - Official Eve docs currently document the agent directory shape, `defineTool`, skills, and `needsApproval`, but not a stable custom workflow file API.
 - Keep workflow files as typed local adapters until Vercel documents runtime conventions.
-- `npm run typecheck` in `eve/` is blocked until dependencies install `tsc`.
+- `npm run typecheck` in `eve/` passes after dependency setup.
+- Eve `0.11.4` declares Node `>=24`; use Node 24+ before relying on runtime execution beyond static typechecking.
 
-Expected Sprint 1 vertical slice:
+Sprint 1 has been implemented:
 
-1. Add Career Brain schemas and JSON-backed service.
-2. Add `/career-brain` FastAPI route.
-3. Add tailored examples schemas and importer.
-4. Parse `docs/tailored_examples/` into local private metadata.
-5. Add tests for profile loading, PDF discovery, page count, headings, and first diff classification.
-6. Add Eve tool contracts for Career Brain and tailored examples retrieval.
+- Career Brain schemas and JSON-backed service exist.
+- `GET/PUT /career-brain` exists.
+- Tailored examples schemas and importer exist.
+- All 20 PDFs under `docs/tailored_examples/` are discovered and parse as two pages in tests.
+- First master-vs-example diff classifier scaffold exists.
+- Eve tools exist for reading Career Brain and listing tailored examples.
+
+Expected Sprint 2 vertical slice:
+
+1. Add local persisted job records under `docs/jobs/`.
+2. Upgrade job parsing to extract requirements, responsibilities, qualifications, keywords, seniority, domain, location/remote hints, and effort signals.
+3. Load Career Brain evidence during scoring.
+4. Score JD requirements against evidence blocks, role preferences, technologies, and skill categories.
+5. Return top evidence block IDs, missing keywords, concerns, and `apply` / `skip` / `worth_20_minutes`.
+6. Keep Eve `score_job` as a thin Core API adapter.
+7. Add tests for persisted job intake and Career Brain-backed scoring.
 
 ## Working Rules
 

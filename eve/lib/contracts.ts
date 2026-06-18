@@ -17,6 +17,97 @@ export interface ScoreJobOutput {
   best_evidence_block_ids: string[];
 }
 
+export interface EvidenceBlock {
+  block_id: string;
+  kind: "profile" | "experience" | "project" | "education" | "skill" | "preference" | "approved_note";
+  text: string;
+  source_label: string;
+  source_path?: string | null;
+  provenance: string[];
+  relevance_tags: string[];
+  technologies: string[];
+  skill_categories: string[];
+  ats_keywords: string[];
+  metrics: string[];
+  priority: number;
+  truth_constraints: string[];
+  length_estimate: number;
+}
+
+export interface ExperienceRecord {
+  experience_id: string;
+  employer: string;
+  role: string;
+  start_date: string;
+  end_date: string;
+  location: string;
+  evidence_block_ids: string[];
+}
+
+export interface ProjectRecord {
+  project_id: string;
+  title: string;
+  summary: string;
+  technologies: string[];
+  links: string[];
+  evidence_block_ids: string[];
+  pr_asset_status: "not_started" | "draft" | "approved";
+}
+
+export interface SkillInventory {
+  categories: Record<string, string[]>;
+  aliases: Record<string, string[]>;
+  role_relevance: Record<string, string[]>;
+}
+
+export interface CareerBrainProfile {
+  schema_version: string;
+  owner: string;
+  source_masters: string[];
+  role_preferences: {
+    preferred_roles: string[];
+    target_companies: string[];
+    preferred_locations: string[];
+    work_authorization_notes: string;
+    avoid_roles: string[];
+  };
+  writing_preferences: {
+    tone: string;
+    max_pages: number;
+    bullet_style: string;
+    banned_claims: string[];
+    preferred_terms: string[];
+  };
+  skills: SkillInventory;
+  evidence_blocks: EvidenceBlock[];
+  experiences: ExperienceRecord[];
+  projects: ProjectRecord[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TailoredExampleSection {
+  heading: string;
+  text: string;
+}
+
+export interface TailoredExample {
+  example_id: string;
+  source_pdf_path: string;
+  role_label: string;
+  pdf_title?: string | null;
+  page_count: number;
+  extracted_text: string;
+  section_headings: string[];
+  sections: TailoredExampleSection[];
+  parse_confidence: number;
+}
+
+export interface TailoredExamplesOutput {
+  examples: TailoredExample[];
+  count: number;
+}
+
 export interface TailorCvInput {
   job_id: string;
   master_id: string;

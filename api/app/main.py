@@ -7,9 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.app.config import settings
+from api.app.routes.career_brain import router as career_brain_router
 from api.app.routes.health import router as health_router
 from api.app.routes.jobs import router as jobs_router
 from api.app.routes.masters import router as masters_router
+from api.app.routes.tailored_examples import router as tailored_examples_router
 from api.app.routes.tailoring import router as tailoring_router
 from api.app.schemas.common import ErrorResponse
 
@@ -41,3 +43,5 @@ app.include_router(health_router)
 app.include_router(masters_router)
 app.include_router(tailoring_router)
 app.include_router(jobs_router)
+app.include_router(career_brain_router)
+app.include_router(tailored_examples_router)
