@@ -2,6 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { callCoreApi } from "../lib/core-api.js";
+import type { TailorCvOutput } from "../lib/contracts.js";
 
 export default defineTool({
   description: "Create a draft tailored CV by calling ApplAI Core. This does not approve or submit the artifact.",
@@ -12,8 +13,17 @@ export default defineTool({
     mode: z.enum(["quick", "full"]).default("quick"),
   }),
   async execute(input) {
-    throw new Error(
-      `Core tailoring by job_id is not exposed yet for ${input.job_id}. Use /tailor/run once the job record endpoint exists.`
-    );
+    return callCoreApi<TailorCvOutput>("/tailor/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        job_id: input.job_id,
+        master_id: input.master_id,
+        options: {
+          max_pages: input.max_pages,
+          quick_mode: input.mode === "quick",
+        },
+      }),
+    });
   },
 });

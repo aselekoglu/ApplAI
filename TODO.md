@@ -11,7 +11,7 @@ Last updated: 2026-06-18
 - [x] Sprint 0.5 Eve spike implemented in a separate agent window.
 - [x] Sprint 1 Career Brain + Tailored Examples foundation implemented.
 - [x] Sprint 2 Job Intake + Career Brain-backed Scoring vertical slice implemented.
-- [ ] Sprint 3 CV Tailoring Engine is next.
+- [ ] Sprint 3 CV Tailoring Engine first vertical slice is implemented; broader approval UI/render hardening remains.
 
 ## Completed Sprint: Sprint 0.5 - Eve Spike And Boundary Proof
 
@@ -130,19 +130,28 @@ Goal: generate a truthful, role-specific, two-page CV from a saved job record an
 
 Recommended order:
 
-- [ ] Review Sprint 2 changed files before layering more work.
-- [ ] Connect existing tailoring service to saved `JobRecord` inputs.
-- [ ] Load Career Brain evidence blocks during tailoring.
-- [ ] Build evidence selection from scored job evidence matches before rewriting.
-- [ ] Ensure each selected/reworded bullet carries source provenance.
-- [ ] Add an unsupported-claim guard that rejects claims without source support.
-- [ ] Add deterministic page-budget metadata before render.
-- [ ] Add render page-count validation for PDF outputs.
-- [ ] Add compression loop ordering: remove low-priority bullets, shorten verbose bullets, reduce project detail, compress skills, adjust spacing last.
-- [ ] Return CV artifact IDs/paths, `page_count`, `layout_passed`, ATS report, QA report, and change log.
-- [ ] Keep Eve `tailor_cv` and `render_cv` as thin Core API adapters and update contracts if response shape changes.
-- [ ] Add tests for provenance, unsupported-claim prevention, page count/compression behavior, and approval boundary.
-- [ ] Keep `python3 -m unittest discover -s tests -p 'test_*.py'`, FastAPI import, `npm test`, `npm run typecheck`, and `git diff --check` passing.
+- [x] Review Sprint 2 changed files before layering more work.
+- [x] Connect existing tailoring service to saved `JobRecord` inputs.
+- [x] Load Career Brain evidence blocks during tailoring.
+- [x] Build evidence selection from scored job evidence matches before rewriting.
+- [x] Ensure each selected/reworded bullet carries source provenance.
+- [x] Add an unsupported-claim guard that rejects claims without source support.
+- [x] Add deterministic page-budget metadata before render.
+- [x] Add render page-count validation for PDF outputs where the current render path exposes a CV PDF path.
+- [x] Add compression loop ordering: remove low-priority bullets, shorten verbose bullets, reduce project detail, compress skills, adjust spacing last.
+- [x] Return CV artifact IDs/paths, `page_count`, `layout_passed`, ATS report, QA report, and change log.
+- [x] Keep Eve `tailor_cv` and `render_cv` as thin Core API adapters and update contracts if response shape changes.
+- [x] Add tests for provenance, unsupported-claim prevention, page count/compression behavior, and approval boundary.
+- [x] Keep `python3 -m unittest discover -s tests -p 'test_*.py'`, FastAPI import, `npm test`, `npm run typecheck`, and `git diff --check` passing.
+
+Sprint 3 first-slice verification notes:
+
+- [x] `python3 -m unittest discover -s tests -p 'test_*.py'` passed.
+- [x] `python3 -c "import api.app.main; print(api.app.main.app.title)"` passed.
+- [x] `npm test` in `eve/` passed.
+- [x] `npm run typecheck` in `eve/` passed.
+- [x] `git diff --check` passed.
+- [ ] Current CV render path still writes DOCX for the CV; PDF page-count validation is conditional and will activate when a CV PDF export path is available.
 
 ## Near-Term Backlog
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class TailorRunOptions(BaseModel):
@@ -20,8 +20,33 @@ class TailorRunOptions(BaseModel):
 
 class TailorRunRequest(BaseModel):
     master_id: str
-    job_description: str = Field(..., min_length=1)
+    job_description: Optional[str] = Field(default=None, min_length=1)
+    job_id: Optional[str] = Field(default=None, min_length=1)
     options: TailorRunOptions = Field(default_factory=TailorRunOptions)
+
+    @model_validator(mode="after")
+    def require_job_source(self) -> "TailorRunRequest":
+        if not self.job_id and not self.job_description:
+            raise ValueError("Either job_id or job_description is required")
+        return self
+
+
+class ProvenanceRef(BaseModel):
+    source_type: Literal["career_brain", "job_record", "master_cv", "workflow"]
+    source_id: str
+    source_label: str = ""
+    source_path: Optional[str] = None
+    supported_text: str = ""
+
+
+class SelectedEvidenceBlock(BaseModel):
+    evidence_block_id: str
+    source_label: str
+    text: str
+    score: int = 0
+    matched_terms: List[str] = Field(default_factory=list)
+    priority: int = 0
+    provenance: List[ProvenanceRef] = Field(default_factory=list)
 
 
 class Selection(BaseModel):
@@ -33,6 +58,8 @@ class Selection(BaseModel):
     rewrite_rationale: Optional[str] = None
     relevance_score: float = 0.0
     jd_requirements_addressed: List[str] = Field(default_factory=list)
+    provenance: List[ProvenanceRef] = Field(default_factory=list)
+    unsupported_claims: List[str] = Field(default_factory=list)
 
 
 class TailoredOutputPayload(BaseModel):
@@ -52,6 +79,8 @@ class ChangeLogEntryPayload(BaseModel):
     new_text: Optional[str] = None
     rationale: str = ""
     jd_requirements_addressed: List[str] = Field(default_factory=list)
+    provenance: List[ProvenanceRef] = Field(default_factory=list)
+    unsupported_claims: List[str] = Field(default_factory=list)
 
 
 class ChangeLogPayload(BaseModel):
@@ -72,6 +101,7 @@ class QaReportPayload(BaseModel):
     key_pain_points: List[str] = Field(default_factory=list)
     strong_points: List[str] = Field(default_factory=list)
     feedback: str = ""
+    unsupported_claim_guard_passed: bool = True
 
 
 class AtsReportPayload(BaseModel):
@@ -82,6 +112,42 @@ class AtsReportPayload(BaseModel):
     coverage_pct: float = 0.0
 
 
+class PageBudgetMetadata(BaseModel):
+    max_pages: int = 2
+    target_page_count: int = 2
+    profile_bullet_budget: int = 3
+    experience_bullet_budget: int = 8
+    project_bullet_budget: int = 3
+    education_bullet_budget: int = 2
+    estimated_selected_bullets: int = 0
+    estimated_words: int = 0
+    compression_order: List[str] = Field(
+        default_factory=lambda: [
+            "remove_low_priority_bullets",
+            "shorten_verbose_bullets",
+            "reduce_project_detail",
+            "compress_skills",
+            "adjust_spacing_last",
+        ]
+    )
+
+
+class LayoutValidation(BaseModel):
+    max_pages: int = 2
+    page_count: Optional[int] = None
+    layout_passed: Optional[bool] = None
+    validation_method: str = "pre_render_budget"
+    notes: List[str] = Field(default_factory=list)
+
+
+class ArtifactMetadata(BaseModel):
+    artifact_id: str
+    kind: str
+    path: str
+    page_count: Optional[int] = None
+    layout_passed: Optional[bool] = None
+
+
 class TailoringResultPayload(BaseModel):
     canonical_cv: Dict[str, Any]
     jd_analysis: Dict[str, Any]
@@ -90,6 +156,14 @@ class TailoringResultPayload(BaseModel):
     qa_report: QaReportPayload
     ats_report: AtsReportPayload
     cover_letter: str = ""
+    job_id: Optional[str] = None
+    master_id: Optional[str] = None
+    selected_evidence_block_ids: List[str] = Field(default_factory=list)
+    selected_evidence: List[SelectedEvidenceBlock] = Field(default_factory=list)
+    page_budget: PageBudgetMetadata = Field(default_factory=PageBudgetMetadata)
+    layout_validation: LayoutValidation = Field(default_factory=LayoutValidation)
+    artifacts: List[ArtifactMetadata] = Field(default_factory=list)
+    approval_status: Literal["draft", "pending_review", "approved", "rejected"] = "draft"
 
 
 class TailorRunResponse(BaseModel):
@@ -98,6 +172,11 @@ class TailorRunResponse(BaseModel):
     created_at: str
     options: TailorRunOptions
     result: TailoringResultPayload
+    job_id: Optional[str] = None
+    selected_evidence_block_ids: List[str] = Field(default_factory=list)
+    page_count: Optional[int] = None
+    layout_passed: Optional[bool] = None
+    artifact_ids: List[str] = Field(default_factory=list)
 
 
 class RunSummary(BaseModel):
@@ -116,6 +195,7 @@ class RunDetailResponse(BaseModel):
     options: TailorRunOptions
     result: TailoringResultPayload
     exports: Optional[Dict[str, Any]] = None
+    job_id: Optional[str] = None
 
 
 class ExportRequest(BaseModel):
@@ -127,3 +207,8 @@ class ExportResponse(BaseModel):
     cv_path: str
     cover_letter_path: str
     docs_url: Optional[str] = None
+    docx_path: Optional[str] = None
+    pdf_path: Optional[str] = None
+    page_count: Optional[int] = None
+    layout_passed: Optional[bool] = None
+    artifact_ids: List[str] = Field(default_factory=list)

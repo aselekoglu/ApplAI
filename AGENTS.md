@@ -75,13 +75,23 @@ Sprint 2 has been implemented:
 
 Expected Sprint 3 vertical slice:
 
-1. Feed saved `JobRecord` + Career Brain evidence into the CV tailoring pipeline.
-2. Select evidence blocks before any rewrite.
-3. Add provenance for every selected or rewritten bullet.
-4. Add deterministic two-page render validation and compression loop.
-5. Return DOCX/PDF paths, page count, ATS report, QA report, and change log.
-6. Keep Eve `tailor_cv` and `render_cv` as thin Core API adapters.
-7. Add tests for provenance, unsupported-claim prevention, page-count behavior, and approval status boundaries.
+First vertical slice implemented:
+
+1. Saved `JobRecord` + Career Brain evidence feed into the CV tailoring pipeline.
+2. Evidence selection starts from scored job evidence matches.
+3. Selected/reworded bullets and change-log entries carry provenance metadata.
+4. Unsupported-claim guard metadata flags unsupported introduced terms.
+5. Page-budget metadata and compression-loop order are recorded before render.
+6. Export metadata returns artifact IDs/paths and conditional page-count/layout validation when a CV PDF path exists.
+7. Eve `tailor_cv` and `render_cv` remain thin Core API adapters.
+8. Tests cover saved-job tailoring, evidence selection, provenance, unsupported-claim flagging, layout metadata, and draft approval boundary.
+
+Remaining Sprint 3 focus:
+
+1. Make CV PDF generation/page-count validation unconditional, or clearly separate DOCX-only draft render from PDF validation.
+2. Turn compression-loop metadata into a deterministic content reduction pass.
+3. Add a user-facing diff/approval screen before any ready-to-submit state.
+4. Broaden QA around provenance quality, generated artifacts, and application tracker boundaries.
 
 ## Working Rules
 

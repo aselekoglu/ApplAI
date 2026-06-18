@@ -153,10 +153,79 @@ export interface TailorCvInput {
   mode: "quick" | "full";
 }
 
+export interface ProvenanceRef {
+  source_type: "career_brain" | "job_record" | "master_cv" | "workflow";
+  source_id: string;
+  source_label: string;
+  source_path?: string | null;
+  supported_text: string;
+}
+
+export interface SelectedEvidenceBlock {
+  evidence_block_id: string;
+  source_label: string;
+  text: string;
+  score: number;
+  matched_terms: string[];
+  priority: number;
+  provenance: ProvenanceRef[];
+}
+
+export interface LayoutValidation {
+  max_pages: number;
+  page_count?: number | null;
+  layout_passed?: boolean | null;
+  validation_method: string;
+  notes: string[];
+}
+
+export interface ArtifactMetadata {
+  artifact_id: string;
+  kind: string;
+  path: string;
+  page_count?: number | null;
+  layout_passed?: boolean | null;
+}
+
+export interface TailorCvOutput {
+  run_id: string;
+  master_id: string;
+  job_id?: string | null;
+  created_at: string;
+  selected_evidence_block_ids: string[];
+  page_count?: number | null;
+  layout_passed?: boolean | null;
+  artifact_ids: string[];
+  result: {
+    job_id?: string | null;
+    master_id?: string | null;
+    selected_evidence_block_ids: string[];
+    selected_evidence: SelectedEvidenceBlock[];
+    layout_validation: LayoutValidation;
+    artifacts: ArtifactMetadata[];
+    approval_status: "draft" | "pending_review" | "approved" | "rejected";
+    change_log: unknown;
+    qa_report: unknown;
+    ats_report: unknown;
+  };
+}
+
 export interface RenderCvInput {
   run_id: string;
   format: "docx" | "pdf" | "both";
   max_pages: number;
+}
+
+export interface RenderCvOutput {
+  run_id: string;
+  cv_path: string;
+  cover_letter_path: string;
+  docx_path?: string | null;
+  pdf_path?: string | null;
+  page_count?: number | null;
+  layout_passed?: boolean | null;
+  artifact_ids: string[];
+  docs_url?: string | null;
 }
 
 export interface SaveApplicationInput {
