@@ -10,6 +10,7 @@ export default defineTool({
     company_name: z.string().optional(),
     job_title: z.string().optional(),
     source_url: z.string().url().optional(),
+    save_draft: z.boolean().optional(),
   }),
   async execute(input) {
     return scoreJob(input);

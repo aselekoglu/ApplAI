@@ -39,7 +39,7 @@ ApplAI is moving to an Eve-first orchestration model.
 
 Current active build target:
 
-`Sprint 2 - Job Intake And Career Brain-backed Scoring`
+`Sprint 3 - CV Tailoring Engine`
 
 Sprint 0.5 has been implemented:
 
@@ -65,15 +65,23 @@ Sprint 1 has been implemented:
 - First master-vs-example diff classifier scaffold exists.
 - Eve tools exist for reading Career Brain and listing tailored examples.
 
-Expected Sprint 2 vertical slice:
+Sprint 2 has been implemented:
 
-1. Add local persisted job records under `docs/jobs/`.
-2. Upgrade job parsing to extract requirements, responsibilities, qualifications, keywords, seniority, domain, location/remote hints, and effort signals.
-3. Load Career Brain evidence during scoring.
-4. Score JD requirements against evidence blocks, role preferences, technologies, and skill categories.
-5. Return top evidence block IDs, missing keywords, concerns, and `apply` / `skip` / `worth_20_minutes`.
-6. Keep Eve `score_job` as a thin Core API adapter.
-7. Add tests for persisted job intake and Career Brain-backed scoring.
+- Local persisted job records under `docs/jobs/` exist; generated JSON stays ignored.
+- `POST /jobs/import`, `GET /jobs`, and `GET /jobs/{job_id}` exist.
+- Job parsing extracts responsibilities, qualifications, keywords, seniority, domain, location/remote hints, and effort signals.
+- Scoring loads Career Brain evidence and returns evidence matches, missing keywords, concerns, and `apply` / `skip` / `worth_20_minutes`.
+- Eve `score_job` remains a thin Core API adapter.
+
+Expected Sprint 3 vertical slice:
+
+1. Feed saved `JobRecord` + Career Brain evidence into the CV tailoring pipeline.
+2. Select evidence blocks before any rewrite.
+3. Add provenance for every selected or rewritten bullet.
+4. Add deterministic two-page render validation and compression loop.
+5. Return DOCX/PDF paths, page count, ATS report, QA report, and change log.
+6. Keep Eve `tailor_cv` and `render_cv` as thin Core API adapters.
+7. Add tests for provenance, unsupported-claim prevention, page-count behavior, and approval status boundaries.
 
 ## Working Rules
 

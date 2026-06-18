@@ -47,5 +47,9 @@ class Settings:
     def tailored_examples_dir(self) -> str:
         return os.path.join(self.docs_dir, "tailored_examples")
 
+    @property
+    def jobs_dir(self) -> str:
+        return os.path.join(self.docs_dir, "jobs")
+
 
 settings = Settings()

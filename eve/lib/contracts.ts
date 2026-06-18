@@ -5,16 +5,54 @@ export interface ScoreJobInput {
   company_name?: string;
   job_title?: string;
   source_url?: string;
+  save_draft?: boolean;
+}
+
+export interface ParsedJobDescription {
+  responsibilities: string[];
+  qualifications: string[];
+  keywords: string[];
+  seniority: string;
+  domain: string;
+  location_remote_hints: string[];
+  effort_signals: string[];
+}
+
+export interface EvidenceMatch {
+  evidence_block_id: string;
+  score: number;
+  matched_terms: string[];
+}
+
+export interface ScoreReport {
+  match_score: number;
+  recommendation: JobRecommendation;
+  reasons: string[];
+  concerns: string[];
+  missing_keywords: string[];
+  top_evidence_block_ids: string[];
+  evidence_matches: EvidenceMatch[];
+  keyword_coverage: number;
+  role_preference_hits: string[];
+  skill_category_hits: string[];
 }
 
 export interface ScoreJobOutput {
   job_id: string;
+  company_name?: string | null;
+  job_title?: string | null;
+  source_url?: string | null;
   match_score: number;
   recommendation: JobRecommendation;
   reasons: string[];
   concerns: string[];
   missing_keywords: string[];
   best_evidence_block_ids: string[];
+  top_evidence_block_ids: string[];
+  parsed_jd_summary: ParsedJobDescription;
+  score_report: ScoreReport;
+  saved: boolean;
+  job_record_path?: string | null;
 }
 
 export interface EvidenceBlock {

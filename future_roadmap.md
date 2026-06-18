@@ -88,7 +88,7 @@ Exit criteria:
 
 ## Phase 2 - Job Intake And Scoring
 
-Status: next active phase.
+Status: implemented.
 
 Purpose:
 
@@ -96,19 +96,21 @@ Purpose:
 
 Core work:
 
-- Job record schema and local JSON persistence.
-- JD parser for requirements, responsibilities, qualifications, keywords, seniority, and domain.
-- Hybrid scoring: keyword, semantic, role fit, seniority, location, work authorization, career value, effort.
-- Recommendation output: `apply`, `skip`, or `worth_20_minutes`.
-- Eve `score_job` tool connected to real scoring service. The first Core endpoint now exists; this phase upgrades it from keyword heuristic to Career Brain-backed evidence scoring.
-- Evidence matching should use Career Brain evidence blocks and return top evidence block IDs plus missing keyword/evidence gaps.
-- Scored jobs should be saved as draft records under `docs/jobs/`.
+- Job record schema and local JSON persistence: delivered.
+- JD parser for requirements, responsibilities, qualifications, keywords, seniority, and domain: delivered.
+- Hybrid scoring with Career Brain evidence: delivered as first vertical slice.
+- Recommendation output: `apply`, `skip`, or `worth_20_minutes`: delivered.
+- Eve `score_job` tool connected to real scoring service: delivered.
+- Evidence matching returns top evidence block IDs plus missing keyword/evidence gaps: delivered.
+- Scored jobs can be saved as draft records under `docs/jobs/`: delivered.
 
 Exit criteria:
 
 - A pasted JD produces a saved job record, score report, missing keywords, concerns, and recommended positioning.
 
 ## Phase 3 - CV Tailoring Engine
+
+Status: next active phase.
 
 Purpose:
 
@@ -123,6 +125,8 @@ Core work:
 - Compression loop before spacing tweaks.
 - Diff and approval screen.
 - Eve `tailor_cv` and `render_cv` tools.
+- Tailoring should accept saved job records and Career Brain evidence as primary inputs.
+- Generated artifacts should return page count, layout status, ATS report, QA report, and change log.
 
 Exit criteria:
 

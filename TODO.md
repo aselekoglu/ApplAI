@@ -10,7 +10,8 @@ Last updated: 2026-06-18
 - [x] Eve-first orchestration decision added to the master plan.
 - [x] Sprint 0.5 Eve spike implemented in a separate agent window.
 - [x] Sprint 1 Career Brain + Tailored Examples foundation implemented.
-- [ ] Sprint 2 Job Intake + Career Brain-backed Scoring is next.
+- [x] Sprint 2 Job Intake + Career Brain-backed Scoring vertical slice implemented.
+- [ ] Sprint 3 CV Tailoring Engine is next.
 
 ## Completed Sprint: Sprint 0.5 - Eve Spike And Boundary Proof
 
@@ -94,25 +95,54 @@ Sprint 1 verification notes:
 - [ ] Eve runtime execution still needs Node `>=24`; local verification used Node `v22.22.3`, which prints npm `EBADENGINE` warnings for `eve@0.11.4`.
 - [x] No private PDF-derived JSON was generated or committed; tailored examples parse on demand from local PDFs.
 
-## Active Sprint: Sprint 2 - Job Intake And Career Brain-backed Scoring
+## Completed Sprint: Sprint 2 - Job Intake And Career Brain-backed Scoring
 
 Goal: upgrade the first keyword-only scoring path into a persisted job intake and evidence-aware scoring workflow.
 
 Recommended order:
 
-- [ ] Review Sprint 1 changed files before layering more work.
-- [ ] Add `docs/jobs/` local persistence service for job records.
-- [ ] Add `JobRecord` persistence fields for raw JD, company, title, source URL, parsed requirements, score report, recommendation, and timestamps.
-- [ ] Extend `POST /jobs/score` or add `POST /jobs/import` so scored jobs can be saved as drafts.
-- [ ] Parse job descriptions into responsibilities, qualifications, keywords, seniority, domain, location/remote hints, and effort signals.
-- [ ] Load Career Brain evidence blocks during scoring.
-- [ ] Score JD requirements against evidence blocks, role preferences, technologies, and skill categories.
-- [ ] Return top evidence block IDs and missing evidence/keyword gaps.
-- [ ] Keep recommendations limited to `apply`, `skip`, or `worth_20_minutes`.
-- [ ] Update Eve `score_job` contract/adapter if Core response shape changes.
-- [ ] Add tests for persisted job records and Career Brain-backed evidence scoring.
-- [ ] Keep `npm test` and `npm run typecheck` passing in `eve/`.
-- [ ] Do not introduce submit/publish/send/upload/ready-to-submit actions without approval.
+- [x] Review Sprint 1 changed files before layering more work.
+- [x] Add `docs/jobs/` local persistence service for job records.
+- [x] Add `JobRecord` persistence fields for raw JD, company, title, source URL, parsed requirements, score report, recommendation, and timestamps.
+- [x] Extend `POST /jobs/score` or add `POST /jobs/import` so scored jobs can be saved as drafts.
+- [x] Parse job descriptions into responsibilities, qualifications, keywords, seniority, domain, location/remote hints, and effort signals.
+- [x] Load Career Brain evidence blocks during scoring.
+- [x] Score JD requirements against evidence blocks, role preferences, technologies, and skill categories.
+- [x] Return top evidence block IDs and missing evidence/keyword gaps.
+- [x] Keep recommendations limited to `apply`, `skip`, or `worth_20_minutes`.
+- [x] Update Eve `score_job` contract/adapter if Core response shape changes.
+- [x] Add tests for persisted job records and Career Brain-backed evidence scoring.
+- [x] Keep `npm test` and `npm run typecheck` passing in `eve/`.
+- [x] Do not introduce submit/publish/send/upload/ready-to-submit actions without approval.
+
+Sprint 2 verification notes:
+
+- [x] `python3 -m unittest discover -s tests -p 'test_*.py'` passed.
+- [x] `python3 -c "import api.app.main; print(api.app.main.app.title)"` passed.
+- [x] `npm test` in `eve/` passed.
+- [x] `npm run typecheck` in `eve/` passed.
+- [x] `git diff --check` passed.
+- [x] Generated job records remain local JSON under ignored `docs/jobs/*.json`; only `docs/jobs/.gitkeep` is tracked.
+
+## Active Sprint: Sprint 3 - CV Tailoring Engine
+
+Goal: generate a truthful, role-specific, two-page CV from a saved job record and Career Brain evidence.
+
+Recommended order:
+
+- [ ] Review Sprint 2 changed files before layering more work.
+- [ ] Connect existing tailoring service to saved `JobRecord` inputs.
+- [ ] Load Career Brain evidence blocks during tailoring.
+- [ ] Build evidence selection from scored job evidence matches before rewriting.
+- [ ] Ensure each selected/reworded bullet carries source provenance.
+- [ ] Add an unsupported-claim guard that rejects claims without source support.
+- [ ] Add deterministic page-budget metadata before render.
+- [ ] Add render page-count validation for PDF outputs.
+- [ ] Add compression loop ordering: remove low-priority bullets, shorten verbose bullets, reduce project detail, compress skills, adjust spacing last.
+- [ ] Return CV artifact IDs/paths, `page_count`, `layout_passed`, ATS report, QA report, and change log.
+- [ ] Keep Eve `tailor_cv` and `render_cv` as thin Core API adapters and update contracts if response shape changes.
+- [ ] Add tests for provenance, unsupported-claim prevention, page count/compression behavior, and approval boundary.
+- [ ] Keep `python3 -m unittest discover -s tests -p 'test_*.py'`, FastAPI import, `npm test`, `npm run typecheck`, and `git diff --check` passing.
 
 ## Near-Term Backlog
 
@@ -123,7 +153,10 @@ Recommended order:
 - [x] Add `/career-brain` FastAPI route.
 - [x] Implement tailored examples importer for `docs/tailored_examples/`.
 - [x] Add tests for PDF discovery, page count, heading extraction, and master-vs-example diff.
-- [ ] Add persisted job records under `docs/jobs/`.
+- [x] Add persisted job records under `docs/jobs/`.
 - [ ] Add approval service and approval event persistence.
-- [ ] Expand scoring from initial keyword heuristic to Career Brain evidence scoring.
-- [ ] Connect scoring results to application tracker draft records.
+- [x] Expand scoring from initial keyword heuristic to Career Brain evidence scoring.
+- [x] Connect scoring results to draft job records.
+- [ ] Connect approved scoring results to application tracker draft records.
+- [ ] Feed saved jobs and Career Brain evidence into CV tailoring.
+- [ ] Add two-page validation and compression loop.
