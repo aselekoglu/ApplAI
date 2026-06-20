@@ -112,6 +112,21 @@ class AtsReportPayload(BaseModel):
     coverage_pct: float = 0.0
 
 
+class CompressionDecision(BaseModel):
+    action: Literal[
+        "remove_low_priority_bullets",
+        "shorten_verbose_bullets",
+        "reduce_project_detail",
+        "compress_skills",
+        "adjust_spacing_last",
+    ]
+    target: str
+    section: str = ""
+    before: str = ""
+    after: str = ""
+    reason: str = ""
+
+
 class PageBudgetMetadata(BaseModel):
     max_pages: int = 2
     target_page_count: int = 2
@@ -130,6 +145,7 @@ class PageBudgetMetadata(BaseModel):
             "adjust_spacing_last",
         ]
     )
+    compression_decisions: List[CompressionDecision] = Field(default_factory=list)
 
 
 class LayoutValidation(BaseModel):

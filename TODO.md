@@ -11,7 +11,7 @@ Last updated: 2026-06-18
 - [x] Sprint 0.5 Eve spike implemented in a separate agent window.
 - [x] Sprint 1 Career Brain + Tailored Examples foundation implemented.
 - [x] Sprint 2 Job Intake + Career Brain-backed Scoring vertical slice implemented.
-- [ ] Sprint 3 CV Tailoring Engine first vertical slice is implemented; broader approval UI/render hardening remains.
+- [ ] Sprint 3 CV Tailoring Engine continuation is implemented through deterministic compression and render validation hardening; approval UI remains.
 
 ## Completed Sprint: Sprint 0.5 - Eve Spike And Boundary Proof
 
@@ -144,14 +144,30 @@ Recommended order:
 - [x] Add tests for provenance, unsupported-claim prevention, page count/compression behavior, and approval boundary.
 - [x] Keep `python3 -m unittest discover -s tests -p 'test_*.py'`, FastAPI import, `npm test`, `npm run typecheck`, and `git diff --check` passing.
 
-Sprint 3 first-slice verification notes:
+Sprint 3 continuation notes:
+
+- [x] DOCX-only draft render is now explicitly separated from PDF page-count validation in the API contract.
+- [x] PDF render validation records `pdf_page_count`, `page_count`, `layout_passed`, and clear max-page failure notes when a CV PDF path is available.
+- [x] Compression loop is now an actual deterministic content reduction pass:
+  - [x] remove low-priority bullets,
+  - [x] shorten verbose bullets,
+  - [x] reduce project detail,
+  - [x] compress skills,
+  - [x] reserve spacing adjustment as the final fallback metadata.
+- [x] Compression decisions are persisted in page-budget metadata and change-log entries.
+- [x] Provenance QA now attaches Career Brain evidence only when it overlaps the selected/reworded bullet instead of attaching generic top evidence.
+- [x] Unsupported-claim guard reruns after compression.
+- [x] Eve `tailor_cv` and `render_cv` remain thin Core API adapters; TypeScript contracts were expanded for compression metadata only.
+- [ ] User-facing diff/approval screen before ready-to-submit remains.
+
+Sprint 3 verification notes:
 
 - [x] `python3 -m unittest discover -s tests -p 'test_*.py'` passed.
 - [x] `python3 -c "import api.app.main; print(api.app.main.app.title)"` passed.
 - [x] `npm test` in `eve/` passed.
 - [x] `npm run typecheck` in `eve/` passed.
 - [x] `git diff --check` passed.
-- [ ] Current CV render path still writes DOCX for the CV; PDF page-count validation is conditional and will activate when a CV PDF export path is available.
+- [ ] Current default CV render path still writes DOCX for the CV; API now exposes this as DOCX-only draft render with no PDF page-count claim.
 
 ## Near-Term Backlog
 
@@ -167,5 +183,5 @@ Sprint 3 first-slice verification notes:
 - [x] Expand scoring from initial keyword heuristic to Career Brain evidence scoring.
 - [x] Connect scoring results to draft job records.
 - [ ] Connect approved scoring results to application tracker draft records.
-- [ ] Feed saved jobs and Career Brain evidence into CV tailoring.
-- [ ] Add two-page validation and compression loop.
+- [x] Feed saved jobs and Career Brain evidence into CV tailoring.
+- [x] Add two-page validation contract and deterministic compression loop.

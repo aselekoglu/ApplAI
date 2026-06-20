@@ -110,7 +110,7 @@ Exit criteria:
 
 ## Phase 3 - CV Tailoring Engine
 
-Status: active; first vertical slice implemented.
+Status: active; first vertical slice and render/compression hardening implemented.
 
 Purpose:
 
@@ -119,14 +119,14 @@ Purpose:
 Core work:
 
 - Evidence selection before rewriting: first slice implemented from saved job score evidence matches.
-- Grounded rewrite/compression only from source material: unsupported-claim guard metadata added; deterministic compression pass remains.
-- Provenance for every selected or rewritten bullet: first slice implemented.
-- Two-page render validation: pre-render page budget implemented; PDF page-count validation is conditional until CV PDF export is available.
-- Compression loop before spacing tweaks: ordering metadata implemented; actual reduction loop remains.
+- Grounded rewrite/compression only from source material: unsupported-claim guard reruns after deterministic compression.
+- Provenance for every selected or rewritten bullet: implemented with per-selection Career Brain support filtering.
+- Two-page render validation: pre-render page budget implemented; CV PDF page-count validation fails clearly when a PDF path is available; DOCX-only draft render is explicitly marked as not PDF-validated.
+- Compression loop before spacing tweaks: deterministic reduction pass implemented for low-priority bullet removal, verbose bullet shortening, project detail reduction, and skill compression.
 - Diff and approval screen: still remaining.
 - Eve `tailor_cv` and `render_cv` tools: connected as thin Core API adapters.
 - Tailoring should accept saved job records and Career Brain evidence as primary inputs: first slice implemented.
-- Generated artifacts should return page count, layout status, ATS report, QA report, and change log: first slice implemented, with PDF page count conditional on available CV PDF path.
+- Generated artifacts should return page count, layout status, ATS report, QA report, and change log: implemented for DOCX draft and PDF-validation paths, with page count only claimed for PDF outputs.
 
 Exit criteria:
 

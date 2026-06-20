@@ -11,6 +11,7 @@ import agent_workflow
 from api.app.config import settings
 from api.app.schemas.career_brain import CareerBrainProfile, EvidenceBlock, SkillInventory
 from api.app.schemas.jobs import ScoreJobRequest
+from api.app.services.export_service import export_run
 from api.app.services.career_brain_service import save_career_brain_profile
 from api.app.services.job_scoring_service import score_job
 from api.app.services.tailoring_service import get_run_record, run_tailoring_job
@@ -132,6 +133,87 @@ class TailoringServiceSprint3Test(unittest.TestCase):
             cover_letter="Draft cover letter.",
         )
 
+    def _bloated_workflow_result(self, job_description: str, base_cv_json_text: str, options: TailorRunOptions):
+        cv = agent_workflow.CanonicalCV(
+            full_name="Ata Selekoglu",
+            profile_bullets=[
+                agent_workflow.BulletEvidence(bullet_id="prof_keep", text="Built Python FastAPI services for workflow automation.", section="profile"),
+                agent_workflow.BulletEvidence(bullet_id="prof_low", text="Provided general office support unrelated to software roles.", section="profile"),
+                agent_workflow.BulletEvidence(bullet_id="prof_verbose", text="Built Python FastAPI services for workflow automation with REST APIs, React dashboards, stakeholder reporting, operational monitoring, documentation, and extensive cross-functional enablement for business users.", section="profile"),
+            ],
+            skills_sections={"Technical": ["Python", "FastAPI", "React", "REST APIs", "SQL", "workflow automation", "Kubernetes", "Power BI"]},
+        )
+        jd = agent_workflow.JDAnalysis(
+            domain="software",
+            must_have_keywords=["python", "fastapi", "react", "automation", "sql"],
+            raw_summary="Build internal software automation.",
+        )
+        tailored = agent_workflow.TailoredOutput(
+            profile_selections=[
+                agent_workflow.BulletSelection(
+                    bullet_id="prof_keep",
+                    section="profile",
+                    action="select_as_is",
+                    original_text="Built Python FastAPI services for workflow automation.",
+                    relevance_score=0.95,
+                ),
+                agent_workflow.BulletSelection(
+                    bullet_id="prof_low",
+                    section="profile",
+                    action="select_as_is",
+                    original_text="Provided general office support unrelated to software roles.",
+                    relevance_score=0.05,
+                ),
+                agent_workflow.BulletSelection(
+                    bullet_id="prof_verbose",
+                    section="profile",
+                    action="rewrite",
+                    original_text="Built Python FastAPI services for workflow automation.",
+                    new_text="Built Python FastAPI services for workflow automation with REST APIs, React dashboards, stakeholder reporting, operational monitoring, documentation, Kubernetes deployment leadership, and extensive cross-functional enablement for business users.",
+                    rewrite_rationale="Emphasized delivery breadth.",
+                    relevance_score=0.8,
+                ),
+            ],
+            experience_selections=[
+                agent_workflow.BulletSelection(
+                    bullet_id=f"exp_{idx}",
+                    section="experience",
+                    action="select_as_is",
+                    original_text=f"Created SQL reporting workflow {idx} for internal stakeholders.",
+                    relevance_score=0.45 + idx / 100,
+                )
+                for idx in range(10)
+            ],
+            project_selections=[
+                agent_workflow.BulletSelection(
+                    bullet_id=f"proj_{idx}",
+                    section="projects",
+                    action="select_as_is",
+                    original_text=f"Project detail {idx}: delivered Python automation, API integration, dashboard reporting, documentation, stakeholder rollout, and maintenance planning.",
+                    relevance_score=0.35 + idx / 100,
+                )
+                for idx in range(5)
+            ],
+            skills_to_highlight=["Python", "FastAPI", "React", "REST APIs", "SQL", "workflow automation", "Kubernetes", "Power BI"],
+        )
+        ats = agent_workflow.ATSReport(
+            jd_keywords=["python", "fastapi", "react", "automation", "sql"],
+            covered_keywords=["python", "fastapi", "automation", "sql"],
+            gap_keywords=["react"],
+            coverage_pct=80.0,
+        )
+        qa = agent_workflow.QAReport(matching_rate_score=78, factual_support_passed=True, keyword_coverage_pct=80.0)
+        change_log = agent_workflow.generate_change_log(tailored)
+        return agent_workflow.WorkflowResult(
+            canonical_cv=cv,
+            jd_analysis=jd,
+            tailored_output=tailored,
+            qa_report=qa,
+            change_log=change_log,
+            ats_report=ats,
+            cover_letter="Draft cover letter.",
+        )
+
     def test_saved_job_tailoring_adds_evidence_provenance_and_layout_metadata(self) -> None:
         with patch("api.app.services.tailoring_service.run_tailoring", side_effect=self._fake_workflow_result):
             response = run_tailoring_job(
@@ -173,6 +255,122 @@ class TailoringServiceSprint3Test(unittest.TestCase):
         persisted = get_run_record(response.run_id)
         self.assertEqual(persisted["job_id"], self.job_id)
         self.assertEqual(persisted["result"]["selected_evidence_block_ids"], response.selected_evidence_block_ids)
+
+    def test_compression_runs_in_deterministic_order_and_logs_decisions(self) -> None:
+        with patch("api.app.services.tailoring_service.run_tailoring", side_effect=self._bloated_workflow_result):
+            response = run_tailoring_job(
+                TailorRunRequest(
+                    job_id=self.job_id,
+                    master_id=self.master_id,
+                    options=TailorRunOptions(include_cover_letter=False, max_pages=2),
+                )
+            )
+
+        decisions = response.result.page_budget.compression_decisions
+        self.assertGreaterEqual(len(decisions), 4)
+        self.assertEqual(
+            [decision.action for decision in decisions[:4]],
+            [
+                "remove_low_priority_bullets",
+                "shorten_verbose_bullets",
+                "reduce_project_detail",
+                "compress_skills",
+            ],
+        )
+        self.assertEqual(response.result.tailored_output.profile_selections[1].action, "deselect")
+        self.assertLess(len(response.result.tailored_output.profile_selections[2].new_text.split()), 18)
+        self.assertLessEqual(len(response.result.tailored_output.project_selections), 3)
+        self.assertLessEqual(len(response.result.tailored_output.skills_to_highlight), 6)
+
+        compression_entries = [
+            entry for entry in response.result.change_log.entries if entry.action.startswith("compression_")
+        ]
+        self.assertGreaterEqual(len(compression_entries), 4)
+        self.assertTrue(any("remove_low_priority_bullets" in entry.rationale for entry in compression_entries))
+        self.assertTrue(any("shorten_verbose_bullets" in entry.rationale for entry in compression_entries))
+        self.assertTrue(any("reduce_project_detail" in entry.rationale for entry in compression_entries))
+        self.assertTrue(any("compress_skills" in entry.rationale for entry in compression_entries))
+        self.assertTrue(any("kubernetes" in claim.lower() for claim in response.result.qa_report.unsupported_claims))
+        self.assertEqual(response.result.approval_status, "draft")
+        self.assertNotIn("ready_to_submit", response.model_dump_json())
+
+    def test_export_records_pdf_page_count_and_layout_failure(self) -> None:
+        with patch("api.app.services.tailoring_service.run_tailoring", side_effect=self._fake_workflow_result):
+            response = run_tailoring_job(
+                TailorRunRequest(
+                    job_id=self.job_id,
+                    master_id=self.master_id,
+                    options=TailorRunOptions(include_cover_letter=False, max_pages=2),
+                )
+            )
+
+        pdf_path = str(Path(settings.docs_dir, "Ata_CV_Tailored_CoreCo.pdf"))
+        cover_path = str(Path(settings.docs_dir, "Ata_CL_Tailored_CoreCo.pdf"))
+        Path(pdf_path).write_bytes(b"%PDF-1.4 placeholder")
+        Path(cover_path).write_bytes(b"%PDF-1.4 placeholder")
+        artifact_data = {
+            "cv_path": pdf_path,
+            "cl_path": cover_path,
+            "docs_url": None,
+            "cv_bytes": b"",
+            "cl_bytes": b"",
+            "cover_letter_text": "Draft cover letter.",
+        }
+        with patch("api.app.services.export_service.render_run_artifacts", return_value=artifact_data), patch(
+            "api.app.services.export_service._pdf_page_count",
+            side_effect=lambda path: 3 if path == pdf_path else 1,
+        ):
+            export = export_run(response.run_id)
+
+        self.assertEqual(export.pdf_path, pdf_path)
+        self.assertIsNone(export.docx_path)
+        self.assertEqual(export.page_count, 3)
+        self.assertFalse(export.layout_passed)
+
+        persisted = get_run_record(response.run_id)
+        layout = persisted["result"]["layout_validation"]
+        self.assertEqual(layout["validation_method"], "pdf_page_count")
+        self.assertEqual(layout["page_count"], 3)
+        self.assertFalse(layout["layout_passed"])
+        self.assertTrue(any("exceeds max_pages 2" in note for note in layout["notes"]))
+
+    def test_export_docx_draft_is_explicitly_not_pdf_validated(self) -> None:
+        with patch("api.app.services.tailoring_service.run_tailoring", side_effect=self._fake_workflow_result):
+            response = run_tailoring_job(
+                TailorRunRequest(
+                    job_id=self.job_id,
+                    master_id=self.master_id,
+                    options=TailorRunOptions(include_cover_letter=False, max_pages=2),
+                )
+            )
+
+        docx_path = str(Path(settings.docs_dir, "Ata_CV_Tailored_CoreCo.docx"))
+        cover_path = str(Path(settings.docs_dir, "Ata_CL_Tailored_CoreCo.pdf"))
+        Path(docx_path).write_bytes(b"docx placeholder")
+        Path(cover_path).write_bytes(b"%PDF-1.4 placeholder")
+        artifact_data = {
+            "cv_path": docx_path,
+            "cl_path": cover_path,
+            "docs_url": None,
+            "cv_bytes": b"",
+            "cl_bytes": b"",
+            "cover_letter_text": "Draft cover letter.",
+        }
+        with patch("api.app.services.export_service.render_run_artifacts", return_value=artifact_data), patch(
+            "api.app.services.export_service._pdf_page_count",
+            return_value=None,
+        ):
+            export = export_run(response.run_id)
+
+        self.assertEqual(export.docx_path, docx_path)
+        self.assertIsNone(export.pdf_path)
+        self.assertIsNone(export.page_count)
+        self.assertIsNone(export.layout_passed)
+        persisted = get_run_record(response.run_id)
+        layout = persisted["result"]["layout_validation"]
+        self.assertEqual(layout["validation_method"], "docx_draft_no_pdf_validation")
+        self.assertIsNone(layout["layout_passed"])
+        self.assertTrue(any("PDF page-count validation was not run" in note for note in layout["notes"]))
 
 
 if __name__ == "__main__":

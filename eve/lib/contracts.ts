@@ -179,6 +179,33 @@ export interface LayoutValidation {
   notes: string[];
 }
 
+export interface CompressionDecision {
+  action:
+    | "remove_low_priority_bullets"
+    | "shorten_verbose_bullets"
+    | "reduce_project_detail"
+    | "compress_skills"
+    | "adjust_spacing_last";
+  target: string;
+  section: string;
+  before: string;
+  after: string;
+  reason: string;
+}
+
+export interface PageBudgetMetadata {
+  max_pages: number;
+  target_page_count: number;
+  profile_bullet_budget: number;
+  experience_bullet_budget: number;
+  project_bullet_budget: number;
+  education_bullet_budget: number;
+  estimated_selected_bullets: number;
+  estimated_words: number;
+  compression_order: CompressionDecision["action"][];
+  compression_decisions: CompressionDecision[];
+}
+
 export interface ArtifactMetadata {
   artifact_id: string;
   kind: string;
@@ -201,6 +228,7 @@ export interface TailorCvOutput {
     master_id?: string | null;
     selected_evidence_block_ids: string[];
     selected_evidence: SelectedEvidenceBlock[];
+    page_budget: PageBudgetMetadata;
     layout_validation: LayoutValidation;
     artifacts: ArtifactMetadata[];
     approval_status: "draft" | "pending_review" | "approved" | "rejected";

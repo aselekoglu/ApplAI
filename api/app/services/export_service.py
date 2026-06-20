@@ -42,8 +42,22 @@ def export_run(run_id: str) -> ExportResponse:
     cv_path = artifact_data["cv_path"]
     cv_page_count = _pdf_page_count(cv_path)
     previous_layout = record.get("result", {}).get("layout_validation", {})
-    layout_passed = cv_page_count <= max_pages if cv_page_count is not None else previous_layout.get("layout_passed")
-    validation_method = "pdf_page_count" if cv_page_count is not None else previous_layout.get("validation_method", "pre_render_budget")
+    notes = list(previous_layout.get("notes") or [])
+    if cv_page_count is not None:
+        layout_passed = cv_page_count <= max_pages
+        validation_method = "pdf_page_count"
+        if layout_passed:
+            notes.append(f"PDF page count {cv_page_count} is within max_pages {max_pages}.")
+        else:
+            notes.append(f"PDF page count {cv_page_count} exceeds max_pages {max_pages}.")
+    elif cv_path.lower().endswith(".docx"):
+        layout_passed = None
+        validation_method = "docx_draft_no_pdf_validation"
+        notes.append("DOCX draft render completed; PDF page-count validation was not run.")
+    else:
+        layout_passed = previous_layout.get("layout_passed")
+        validation_method = previous_layout.get("validation_method", "pre_render_budget")
+        notes.append("No PDF page-count signal was available; retained previous layout validation.")
 
     artifacts = [
         ArtifactMetadata(
@@ -77,6 +91,7 @@ def export_run(run_id: str) -> ExportResponse:
         "page_count": cv_page_count,
         "layout_passed": layout_passed,
         "validation_method": validation_method,
+        "notes": notes,
     }
     record["result"] = result_payload
     update_run_record(run_id, {"result": result_payload, "exports": exports})

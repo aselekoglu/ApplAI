@@ -86,12 +86,26 @@ First vertical slice implemented:
 7. Eve `tailor_cv` and `render_cv` remain thin Core API adapters.
 8. Tests cover saved-job tailoring, evidence selection, provenance, unsupported-claim flagging, layout metadata, and draft approval boundary.
 
+Sprint 3 continuation implemented:
+
+1. DOCX-only draft render is explicitly separated from PDF page-count validation in the API contract.
+2. CV PDF page-count validation records clear pass/fail metadata when a CV PDF path is available.
+3. Deterministic compression now mutates draft content before render metadata:
+   - remove low-priority bullets,
+   - shorten verbose bullets,
+   - reduce project detail,
+   - compress skills,
+   - adjust spacing last.
+4. Compression decisions are persisted in page-budget metadata and the change log.
+5. Provenance QA filters Career Brain support per selected/reworded bullet instead of attaching generic top evidence.
+6. Unsupported-claim guard reruns after compression.
+7. Eve `tailor_cv` and `render_cv` remain thin Core API adapters.
+
 Remaining Sprint 3 focus:
 
-1. Make CV PDF generation/page-count validation unconditional, or clearly separate DOCX-only draft render from PDF validation.
-2. Turn compression-loop metadata into a deterministic content reduction pass.
-3. Add a user-facing diff/approval screen before any ready-to-submit state.
-4. Broaden QA around provenance quality, generated artifacts, and application tracker boundaries.
+1. Add a user-facing diff/approval screen before any ready-to-submit state.
+2. Add unconditional CV PDF generation if the renderer path is upgraded beyond DOCX draft export.
+3. Broaden QA around generated artifacts and application tracker boundaries.
 
 ## Working Rules
 

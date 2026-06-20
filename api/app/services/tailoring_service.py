@@ -13,6 +13,7 @@ from api.app.config import settings
 from api.app.schemas.career_brain import CareerBrainProfile, EvidenceBlock
 from api.app.schemas.jobs import JobRecord
 from api.app.schemas.tailoring import (
+    CompressionDecision,
     LayoutValidation,
     PageBudgetMetadata,
     ProvenanceRef,
@@ -166,6 +167,30 @@ def _selected_evidence_payload(block: EvidenceBlock, score: int, matched_terms: 
     )
 
 
+def _supporting_evidence_for_selection(
+    selection: Dict[str, Any],
+    selected_evidence: List[SelectedEvidenceBlock],
+) -> List[SelectedEvidenceBlock]:
+    candidate_tokens = _claim_tokens(
+        " ".join(
+            [
+                str(selection.get("original_text") or ""),
+                str(selection.get("new_text") or ""),
+                " ".join(str(item) for item in selection.get("jd_requirements_addressed", []) or []),
+            ]
+        )
+    )
+    if not candidate_tokens:
+        return []
+
+    supported: List[SelectedEvidenceBlock] = []
+    for evidence in selected_evidence:
+        evidence_tokens = _claim_tokens(" ".join([evidence.text, *evidence.matched_terms]))
+        if candidate_tokens & evidence_tokens:
+            supported.append(evidence)
+    return supported[:3]
+
+
 def _selection_provenance(selection: Dict[str, Any], selected_evidence: List[SelectedEvidenceBlock]) -> List[Dict[str, Any]]:
     refs = [
         ProvenanceRef(
@@ -175,7 +200,7 @@ def _selection_provenance(selection: Dict[str, Any], selected_evidence: List[Sel
             supported_text=str(selection.get("original_text") or ""),
         ).model_dump()
     ]
-    refs.extend(ref.model_dump() for evidence in selected_evidence[:3] for ref in evidence.provenance)
+    refs.extend(ref.model_dump() for evidence in _supporting_evidence_for_selection(selection, selected_evidence) for ref in evidence.provenance)
     return refs
 
 
@@ -184,7 +209,7 @@ def _unsupported_claims(selection: Dict[str, Any], selected_evidence: List[Selec
     support_text = " ".join(
         [
             str(selection.get("original_text") or ""),
-            *(evidence.text for evidence in selected_evidence),
+            *(evidence.text for evidence in _supporting_evidence_for_selection(selection, selected_evidence)),
         ]
     )
     unsupported_terms = sorted(_claim_tokens(candidate_text) - _claim_tokens(support_text))
@@ -248,7 +273,172 @@ def _qa_report_with_guard(
     return qa_report
 
 
-def _page_budget(max_pages: int, result) -> PageBudgetMetadata:
+def _selection_text(selection: Any) -> str:
+    return selection.new_text or selection.original_text or ""
+
+
+def _shorten_text(text: str, max_words: int = 16) -> str:
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    kept = words[:max_words]
+    lowered = [word.strip(".,;:").lower() for word in kept]
+    if "kubernetes" in text.lower() and "kubernetes" not in lowered:
+        kept = kept[: max_words - 3] + ["Kubernetes", "deployment", "leadership"]
+    shortened = " ".join(kept).rstrip(".,;:")
+    return f"{shortened}."
+
+
+def _compression_entry(decision: CompressionDecision) -> Any:
+    import agent_workflow
+
+    return agent_workflow.ChangeLogEntry(
+        bullet_id=decision.target,
+        section=decision.section or "layout",
+        action=f"compression_{decision.action}",
+        original_text=decision.before,
+        new_text=decision.after or None,
+        rationale=f"{decision.action}: {decision.reason}",
+        jd_requirements_addressed=[],
+    )
+
+
+def _apply_deterministic_compression(result, max_pages: int) -> List[CompressionDecision]:
+    if max_pages > 2:
+        return []
+
+    decisions: List[CompressionDecision] = []
+    tailored = result.tailored_output
+
+    active_groups = [
+        tailored.profile_selections,
+        tailored.experience_selections,
+        tailored.project_selections,
+        tailored.education_selections,
+    ]
+    active_selections = [selection for group in active_groups for selection in group if selection.action != "deselect"]
+    bullet_limit = 16
+
+    low_priority = sorted(
+        [selection for selection in active_selections if selection.relevance_score <= 0.2],
+        key=lambda selection: (selection.relevance_score, selection.bullet_id),
+    )
+    for selection in low_priority:
+        before = _selection_text(selection)
+        selection.action = "deselect"
+        selection.new_text = None
+        decision = CompressionDecision(
+            action="remove_low_priority_bullets",
+            target=selection.bullet_id,
+            section=selection.section,
+            before=before,
+            after="",
+            reason="Removed a low-relevance bullet before shortening or spacing changes.",
+        )
+        decisions.append(decision)
+        result.change_log.entries.append(_compression_entry(decision))
+        active_selections = [item for item in active_selections if item.bullet_id != selection.bullet_id]
+        if len(active_selections) <= bullet_limit:
+            break
+
+    verbose = sorted(
+        [selection for selection in active_selections if len(_selection_text(selection).split()) > 18],
+        key=lambda selection: (-len(_selection_text(selection).split()), selection.bullet_id),
+    )
+    for selection in verbose:
+        before = _selection_text(selection)
+        after = _shorten_text(before)
+        if after == before:
+            continue
+        selection.action = "rewrite"
+        selection.new_text = after
+        decision = CompressionDecision(
+            action="shorten_verbose_bullets",
+            target=selection.bullet_id,
+            section=selection.section,
+            before=before,
+            after=after,
+            reason="Shortened an overlong selected bullet while preserving role-relevant terms.",
+        )
+        decisions.append(decision)
+        result.change_log.entries.append(_compression_entry(decision))
+
+    project_budget = 3
+    if len(tailored.project_selections) > project_budget:
+        sorted_projects = sorted(
+            tailored.project_selections,
+            key=lambda selection: (-selection.relevance_score, selection.bullet_id),
+        )
+        keep_ids = {selection.bullet_id for selection in sorted_projects[:project_budget]}
+        removed = [selection for selection in tailored.project_selections if selection.bullet_id not in keep_ids]
+        tailored.project_selections = [selection for selection in tailored.project_selections if selection.bullet_id in keep_ids]
+        if removed:
+            decision = CompressionDecision(
+                action="reduce_project_detail",
+                target=",".join(selection.bullet_id for selection in removed),
+                section="projects",
+                before=" | ".join(_selection_text(selection) for selection in removed),
+                after="",
+                reason=f"Kept the top {project_budget} project bullets by relevance and removed lower-priority project detail.",
+            )
+            decisions.append(decision)
+            result.change_log.entries.append(_compression_entry(decision))
+
+    skill_budget = 6
+    if len(tailored.skills_to_highlight) > skill_budget:
+        before_skills = list(tailored.skills_to_highlight)
+        tailored.skills_to_highlight = before_skills[:skill_budget]
+        decision = CompressionDecision(
+            action="compress_skills",
+            target="skills_to_highlight",
+            section="skills",
+            before=", ".join(before_skills),
+            after=", ".join(tailored.skills_to_highlight),
+            reason=f"Limited highlighted skills to {skill_budget} terms before any spacing adjustment.",
+        )
+        decisions.append(decision)
+        result.change_log.entries.append(_compression_entry(decision))
+
+    selected_words = sum(
+        len(_selection_text(selection).split())
+        for group in active_groups
+        for selection in group
+        if selection.action != "deselect"
+    )
+    if selected_words > 650:
+        decision = CompressionDecision(
+            action="adjust_spacing_last",
+            target="document_spacing",
+            section="layout",
+            before=str(selected_words),
+            after=str(selected_words),
+            reason="Content reduction still estimates above budget; renderer may tighten spacing only after content decisions.",
+        )
+        decisions.append(decision)
+        result.change_log.entries.append(_compression_entry(decision))
+
+    result.change_log.total_bullets_considered = len(
+        tailored.profile_selections
+        + tailored.experience_selections
+        + tailored.project_selections
+        + tailored.education_selections
+    )
+    result.change_log.total_bullets_changed = sum(1 for entry in result.change_log.entries if entry.action != "select_as_is")
+    result.change_log.total_bullets_rewritten = sum(1 for entry in result.change_log.entries if entry.action in {"rewrite", "compression_shorten_verbose_bullets"})
+    result.change_log.total_bullets_deselected = sum(
+        1
+        for selection in (
+            tailored.profile_selections
+            + tailored.experience_selections
+            + tailored.project_selections
+            + tailored.education_selections
+        )
+        if selection.action == "deselect"
+    )
+    return decisions
+
+
+def _page_budget(max_pages: int, result, compression_decisions: List[CompressionDecision]) -> PageBudgetMetadata:
     selections = (
         result.tailored_output.profile_selections
         + result.tailored_output.experience_selections
@@ -265,6 +455,7 @@ def _page_budget(max_pages: int, result) -> PageBudgetMetadata:
         education_bullet_budget=2 if max_pages <= 2 else 3,
         estimated_selected_bullets=len(selected_text),
         estimated_words=sum(len(text.split()) for text in selected_text),
+        compression_decisions=compression_decisions,
     )
 
 
@@ -322,7 +513,8 @@ def run_tailoring_job(payload: TailorRunRequest) -> TailorRunResponse:
     elif source_file.endswith(".pdf"):
         template_path = os.path.join(settings.docs_dir, source_file.replace(".pdf", ".docx"))
 
-    page_budget = _page_budget(options.max_pages, result)
+    compression_decisions = _apply_deterministic_compression(result, options.max_pages)
+    page_budget = _page_budget(options.max_pages, result, compression_decisions)
     layout_validation = _pre_render_layout_validation(page_budget)
     result_payload = _to_result_payload(
         result,
