@@ -110,7 +110,7 @@ Exit criteria:
 
 ## Phase 3 - CV Tailoring Engine
 
-Status: active; first vertical slice and render/compression hardening implemented.
+Status: active; first vertical slice, render/compression hardening, and HTML component-first PDF rendering implemented; approval screen remains.
 
 Purpose:
 
@@ -122,15 +122,17 @@ Core work:
 - Grounded rewrite/compression only from source material: unsupported-claim guard reruns after deterministic compression.
 - Provenance for every selected or rewritten bullet: implemented with per-selection Career Brain support filtering.
 - Two-page render validation: pre-render page budget implemented; CV PDF page-count validation fails clearly when a PDF path is available; DOCX-only draft render is explicitly marked as not PDF-validated.
+- HTML component renderer: implemented as the primary final CV output path. The structured tailoring payload remains source of truth, and HTML/CSS components produce real-text PDFs through a browser print engine.
+- ATS render validation: implemented as a separate gate after PDF generation. Generated PDFs must pass text extraction checks for owner name, section headings, selected bullets, important keywords, and reading order.
 - Compression loop before spacing tweaks: deterministic reduction pass implemented for low-priority bullet removal, verbose bullet shortening, project detail reduction, and skill compression.
 - Diff and approval screen: still remaining.
 - Eve `tailor_cv` and `render_cv` tools: connected as thin Core API adapters.
 - Tailoring should accept saved job records and Career Brain evidence as primary inputs: first slice implemented.
-- Generated artifacts should return page count, layout status, ATS report, QA report, and change log: implemented for DOCX draft and PDF-validation paths, with page count only claimed for PDF outputs.
+- Generated artifacts return page count, visual layout status, ATS parse status, ATS report, QA report, and change log. HTML-first rendering makes PDF page count and ATS parse status the final CV export gate, with DOCX retained as an editable compatibility artifact.
 
 Exit criteria:
 
-- Generated CV has DOCX/PDF outputs, page count <= 2, provenance, ATS report, QA report, and approval status.
+- Generated CV has an HTML-rendered PDF output, optional editable DOCX compatibility output, page count <= 2, ATS-readable extracted text, provenance, ATS report, QA report, and approval status.
 
 ## Phase 4 - Cover Letter And Application Packet
 

@@ -1,6 +1,6 @@
 # ApplAI Active TODO
 
-Last updated: 2026-06-18
+Last updated: 2026-06-21
 
 ## Current Status
 
@@ -11,7 +11,7 @@ Last updated: 2026-06-18
 - [x] Sprint 0.5 Eve spike implemented in a separate agent window.
 - [x] Sprint 1 Career Brain + Tailored Examples foundation implemented.
 - [x] Sprint 2 Job Intake + Career Brain-backed Scoring vertical slice implemented.
-- [ ] Sprint 3 CV Tailoring Engine continuation is implemented through deterministic compression and render validation hardening; approval UI remains.
+- [ ] Sprint 3 CV Tailoring Engine continuation is implemented through deterministic compression and render validation hardening; HTML-first PDF rendering is implemented, approval UI remains.
 
 ## Completed Sprint: Sprint 0.5 - Eve Spike And Boundary Proof
 
@@ -158,6 +158,9 @@ Sprint 3 continuation notes:
 - [x] Provenance QA now attaches Career Brain evidence only when it overlaps the selected/reworded bullet instead of attaching generic top evidence.
 - [x] Unsupported-claim guard reruns after compression.
 - [x] Eve `tailor_cv` and `render_cv` remain thin Core API adapters; TypeScript contracts were expanded for compression metadata only.
+- [x] Replace the default final CV render path with HTML/CSS resume components that generate real-text PDFs.
+- [x] Add PDF text-extraction validation for ATS readability after HTML render.
+- [x] Return `ats_parse_passed` and extracted-text validation notes in render/export metadata.
 - [ ] User-facing diff/approval screen before ready-to-submit remains.
 
 Sprint 3 verification notes:
@@ -167,7 +170,19 @@ Sprint 3 verification notes:
 - [x] `npm test` in `eve/` passed.
 - [x] `npm run typecheck` in `eve/` passed.
 - [x] `git diff --check` passed.
-- [ ] Current default CV render path still writes DOCX for the CV; API now exposes this as DOCX-only draft render with no PDF page-count claim.
+- [x] Current final CV render path writes an HTML-rendered PDF and keeps DOCX as an editable compatibility artifact.
+
+Sprint 3.1 implementation plan:
+
+- [x] HTML component renderer implementation plan added at `docs/superpowers/plans/2026-06-21-html-component-cv-renderer.md`.
+- [x] Implement a structured resume layout model from tailoring output.
+- [x] Implement deterministic HTML/CSS resume components for final CV render.
+- [x] Generate final CV PDF from HTML with a browser print engine.
+- [x] Validate generated PDF page count with `pdfplumber`.
+- [x] Validate generated PDF ATS readability by extracting text and checking headings, bullets, keywords, and order.
+- [x] Integrate HTML PDF artifacts into `POST /tailor/export` while keeping DOCX compatibility output available.
+- [x] Update Eve `render_cv` contracts only as a thin adapter over Core response metadata.
+- [ ] Build the user-facing diff/approval screen on top of the HTML preview and render metadata.
 
 ## Near-Term Backlog
 
@@ -185,3 +200,4 @@ Sprint 3 verification notes:
 - [ ] Connect approved scoring results to application tracker draft records.
 - [x] Feed saved jobs and Career Brain evidence into CV tailoring.
 - [x] Add two-page validation contract and deterministic compression loop.
+- [x] Add HTML-first final PDF renderer and ATS parse gate.

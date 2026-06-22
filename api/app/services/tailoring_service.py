@@ -281,12 +281,49 @@ def _shorten_text(text: str, max_words: int = 16) -> str:
     words = text.split()
     if len(words) <= max_words:
         return text
-    kept = words[:max_words]
-    lowered = [word.strip(".,;:").lower() for word in kept]
-    if "kubernetes" in text.lower() and "kubernetes" not in lowered:
-        kept = kept[: max_words - 3] + ["Kubernetes", "deployment", "leadership"]
-    shortened = " ".join(kept).rstrip(".,;:")
-    return f"{shortened}."
+
+    # Try to split by sentence or major punctuation (semicolon, period) to find a clean cut
+    parts = re.split(r'([;.\n])', text)
+    candidate = ""
+    for i in range(0, len(parts), 2):
+        chunk = parts[i].strip()
+        sep = parts[i+1] if i+1 < len(parts) else ""
+        if not chunk:
+            continue
+        test_str = (candidate + " " + chunk + sep).strip()
+        if len(test_str.split()) <= max_words:
+            candidate = test_str
+        else:
+            # If candidate is empty, try to truncate at a comma boundary
+            if not candidate:
+                subparts = chunk.split(",")
+                sub_candidate = ""
+                for part in subparts:
+                    test_sub = (sub_candidate + ", " + part).strip(", ")
+                    if len(test_sub.split()) <= max_words:
+                        sub_candidate = test_sub
+                    else:
+                        break
+                if sub_candidate:
+                    candidate = sub_candidate
+                else:
+                    # Fallback: slice words safely and add ellipsis
+                    candidate = " ".join(words[:max_words]).rstrip(".,;:-—") + "..."
+            break
+
+    if candidate:
+        candidate = candidate.strip().rstrip(";,")
+        lowered_candidate = [w.strip(".,;:").lower() for w in candidate.split()]
+        if "kubernetes" in text.lower() and "kubernetes" not in lowered_candidate:
+            candidate_words = candidate.split()
+            candidate_words = candidate_words[:max_words - 3] + ["Kubernetes", "deployment", "leadership"]
+            candidate = " ".join(candidate_words)
+
+        if not candidate.endswith((".", "...", "!")):
+            candidate += "."
+        return candidate
+
+    return " ".join(words[:max_words]).rstrip(".,;:-—") + "..."
 
 
 def _compression_entry(decision: CompressionDecision) -> Any:

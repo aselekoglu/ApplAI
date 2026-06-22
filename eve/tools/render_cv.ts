@@ -21,10 +21,17 @@ export default defineTool({
       }
     );
     return {
-      docx_path: input.format === "pdf" ? "" : result.docx_path ?? result.cv_path,
-      pdf_path: input.format === "docx" ? "" : result.pdf_path ?? "",
+      run_id: result.run_id,
+      cv_path: result.cv_path,
+      cover_letter_path: result.cover_letter_path,
+      docs_url: result.docs_url ?? null,
+      docx_path: input.format === "pdf" ? "" : result.docx_path ?? null,
+      pdf_path: input.format === "docx" ? "" : result.pdf_path ?? result.cv_path ?? "",
+      html_path: result.html_path ?? "",
       page_count: result.page_count ?? null,
       layout_passed: result.layout_passed ?? null,
+      ats_parse_passed: result.ats_parse_passed ?? null,
+      ats_parse_notes: result.ats_parse_notes ?? [],
       artifact_ids: result.artifact_ids,
       core_response: result,
     };

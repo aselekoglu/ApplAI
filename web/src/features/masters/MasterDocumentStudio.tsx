@@ -28,7 +28,19 @@ export function MasterDocumentStudio({ sections, sectionKinds, onChange, documen
   const patchSection = useCallback(
     (index: number, partial: Partial<SectionProposal>) => {
       const copy = sections.slice();
-      copy[index] = { ...copy[index], ...partial };
+      const updated = { ...copy[index], ...partial };
+      if (
+        updated.kind === "experience_block" ||
+        updated.kind === "education" ||
+        updated.kind === "projects"
+      ) {
+        if ("title_line" in partial) {
+          updated.title = partial.title_line || "";
+        } else if ("kind" in partial && !updated.title_line) {
+          updated.title_line = updated.title;
+        }
+      }
+      copy[index] = updated;
       onChange(copy);
     },
     [sections, onChange],
@@ -175,41 +187,51 @@ export function MasterDocumentStudio({ sections, sectionKinds, onChange, documen
 
           <article className={`docStudioPage docStudioPage--accent-${accent}`} aria-label="Document page">
             <div className="docStudioRuler" aria-hidden />
-            <label className="docStudioField docStudioField--flush">
-              <span className="docStudioFieldLabel">Heading</span>
-              <input
-                ref={headingRef}
-                className="docStudioTitleInput"
-                value={section.title}
-                onChange={(e) => patchSection(selectedIndex, { title: e.target.value })}
-                placeholder="Section heading as it appears on the CV"
-              />
-            </label>
+            {section.kind !== "experience_block" && section.kind !== "education" && section.kind !== "projects" ? (
+              <label className="docStudioField docStudioField--flush">
+                <span className="docStudioFieldLabel">Heading</span>
+                <input
+                  ref={headingRef}
+                  className="docStudioTitleInput"
+                  value={section.title}
+                  onChange={(e) => patchSection(selectedIndex, { title: e.target.value })}
+                  placeholder="Section heading as it appears on the CV"
+                />
+              </label>
+            ) : null}
 
-            {section.kind === "experience_block" ? (
+            {section.kind === "experience_block" || section.kind === "education" || section.kind === "projects" ? (
               <div className="docStudioMetaGrid">
+                {section.kind === "education" ? (
+                  <label className="docStudioField">
+                    <span className="docStudioFieldLabel">
+                      GPA / Honors
+                    </span>
+                    <input
+                      value={section.role_label ?? ""}
+                      onChange={(e) => patchSection(selectedIndex, { role_label: e.target.value })}
+                      placeholder="GPA: 3.53 / 4.0 or honors"
+                    />
+                  </label>
+                ) : null}
                 <label className="docStudioField">
-                  <span className="docStudioFieldLabel">Role label</span>
-                  <input
-                    value={section.role_label ?? ""}
-                    onChange={(e) => patchSection(selectedIndex, { role_label: e.target.value })}
-                    placeholder="e.g. Senior Analyst"
-                  />
-                </label>
-                <label className="docStudioField">
-                  <span className="docStudioFieldLabel">Employer</span>
+                  <span className="docStudioFieldLabel">
+                    {section.kind === "education" ? "Institution" : section.kind === "projects" ? "Description / Context" : "Employer"}
+                  </span>
                   <input
                     value={section.employer_line ?? ""}
                     onChange={(e) => patchSection(selectedIndex, { employer_line: e.target.value })}
-                    placeholder="Company — City"
+                    placeholder={section.kind === "education" ? "University / College" : section.kind === "projects" ? "e.g. Interactive Platform" : "Company — City"}
                   />
                 </label>
                 <label className="docStudioField">
-                  <span className="docStudioFieldLabel">Title line</span>
+                  <span className="docStudioFieldLabel">
+                    {section.kind === "education" ? "Degree / Program" : section.kind === "projects" ? "Project Title" : "Title line"}
+                  </span>
                   <input
                     value={section.title_line ?? ""}
                     onChange={(e) => patchSection(selectedIndex, { title_line: e.target.value })}
-                    placeholder="Official job title"
+                    placeholder={section.kind === "education" ? "e.g. Bachelor of Science" : section.kind === "projects" ? "e.g. ApplAI" : "Official job title"}
                   />
                 </label>
                 <label className="docStudioField">
@@ -217,7 +239,7 @@ export function MasterDocumentStudio({ sections, sectionKinds, onChange, documen
                   <input
                     value={section.date_line ?? ""}
                     onChange={(e) => patchSection(selectedIndex, { date_line: e.target.value })}
-                    placeholder="2022 — Present"
+                    placeholder={section.kind === "projects" ? "e.g. May 2026" : "2022 — Present"}
                   />
                 </label>
               </div>

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import agent_workflow
 
 from api.app.adapters.renderer_adapter import render_run_artifacts
+from api.app.config import settings
 from api.app.schemas.tailoring import ArtifactMetadata, ExportResponse
+from api.app.services.html_resume_renderer import render_resume_pdf
+from api.app.services.pdf_text_validation_service import validate_pdf_text
+from api.app.services.resume_layout_service import build_resume_layout
 from api.app.services.tailoring_service import get_run_record, update_run_record
 
 
@@ -34,39 +39,84 @@ def _pdf_page_count(path: Optional[str]) -> Optional[int]:
         return None
 
 
+def _safe_company_name(company_name: str) -> str:
+    safe_company = re.sub(r"\W+", "_", company_name or "Co").strip("_")
+    return safe_company or "Co"
+
+
+def _candidate_surname(owner_name: str) -> str:
+    cleaned = str(owner_name or "").strip()
+    if not cleaned:
+        return "Candidate"
+    surname = cleaned.split()[-1]
+    safe_surname = re.sub(r"\W+", "_", surname).strip("_")
+    return safe_surname or "Candidate"
+
+
+def _final_cv_paths(owner_name: str, company_name: str) -> tuple[str, str]:
+    base_name = f"{_candidate_surname(owner_name)}_CV_Tailored_{_safe_company_name(company_name)}"
+    return (
+        str(Path(settings.docs_dir) / f"{base_name}.html"),
+        str(Path(settings.docs_dir) / f"{base_name}.pdf"),
+    )
+
+
 def export_run(run_id: str) -> ExportResponse:
     record = get_run_record(run_id)
     workflow_result = _rehydrate_result(record["result"])
-    artifact_data = render_run_artifacts(workflow_result, record["workflow_inputs"])
-    max_pages = int(record.get("workflow_inputs", {}).get("max_pages") or 2)
-    cv_path = artifact_data["cv_path"]
-    cv_page_count = _pdf_page_count(cv_path)
+    workflow_inputs = record.get("workflow_inputs", {})
+    artifact_data = render_run_artifacts(workflow_result, workflow_inputs)
+    max_pages = int(workflow_inputs.get("max_pages") or 2)
+    result_payload = record.get("result", {})
+    owner_name = workflow_result.canonical_cv.full_name or "Candidate"
+    expected_keywords = result_payload.get("ats_report", {}).get("jd_keywords") or []
+    layout = build_resume_layout(
+        result_payload,
+        owner_name=owner_name,
+        target_role=workflow_inputs.get("job_title", ""),
+        company_name=workflow_inputs.get("company_name", ""),
+        expected_keywords=expected_keywords,
+    )
+    html_path, final_pdf_path = _final_cv_paths(owner_name, workflow_inputs.get("company_name", ""))
+    final_pdf_path = render_resume_pdf(layout, html_path, final_pdf_path)
+    cv_page_count = _pdf_page_count(final_pdf_path)
+    ats_validation = validate_pdf_text(final_pdf_path, layout)
+    layout_passed = cv_page_count is not None and cv_page_count <= max_pages and ats_validation.ats_parse_passed
     previous_layout = record.get("result", {}).get("layout_validation", {})
     notes = list(previous_layout.get("notes") or [])
-    if cv_page_count is not None:
-        layout_passed = cv_page_count <= max_pages
-        validation_method = "pdf_page_count"
-        if layout_passed:
-            notes.append(f"PDF page count {cv_page_count} is within max_pages {max_pages}.")
-        else:
-            notes.append(f"PDF page count {cv_page_count} exceeds max_pages {max_pages}.")
-    elif cv_path.lower().endswith(".docx"):
-        layout_passed = None
-        validation_method = "docx_draft_no_pdf_validation"
-        notes.append("DOCX draft render completed; PDF page-count validation was not run.")
+    validation_method = "html_pdf_page_count_and_ats_text"
+    if cv_page_count is None:
+        notes.append("HTML-rendered PDF page count was unavailable.")
+    elif cv_page_count <= max_pages:
+        notes.append(f"HTML-rendered PDF page count {cv_page_count} is within max_pages {max_pages}.")
     else:
-        layout_passed = previous_layout.get("layout_passed")
-        validation_method = previous_layout.get("validation_method", "pre_render_budget")
-        notes.append("No PDF page-count signal was available; retained previous layout validation.")
+        notes.append(f"HTML-rendered PDF page count {cv_page_count} exceeds max_pages {max_pages}.")
+    notes.extend(ats_validation.notes)
 
     artifacts = [
         ArtifactMetadata(
             artifact_id=f"{run_id}:cv",
-            kind="cv_docx" if cv_path.endswith(".docx") else "cv_pdf",
-            path=cv_path,
+            kind="cv_pdf",
+            path=final_pdf_path,
+            html_path=html_path,
             page_count=cv_page_count,
             layout_passed=layout_passed,
+            ats_parse_passed=ats_validation.ats_parse_passed,
+            ats_parse_notes=ats_validation.notes,
         ).model_dump(),
+    ]
+    docx_path = artifact_data["cv_path"] if artifact_data["cv_path"].lower().endswith(".docx") else None
+    if docx_path:
+        artifacts.append(
+            ArtifactMetadata(
+                artifact_id=f"{run_id}:cv_docx",
+                kind="cv_docx",
+                path=docx_path,
+                page_count=None,
+                layout_passed=None,
+            ).model_dump()
+        )
+    artifacts.append(
         ArtifactMetadata(
             artifact_id=f"{run_id}:cover_letter",
             kind="cover_letter_pdf",
@@ -74,16 +124,20 @@ def export_run(run_id: str) -> ExportResponse:
             page_count=_pdf_page_count(artifact_data["cl_path"]),
             layout_passed=None,
         ).model_dump(),
-    ]
+    )
     exports = {
-        "cv_path": cv_path,
+        "cv_path": final_pdf_path,
         "cover_letter_path": artifact_data["cl_path"],
         "docs_url": artifact_data.get("docs_url"),
+        "docx_path": docx_path,
+        "pdf_path": final_pdf_path,
+        "html_path": html_path,
         "page_count": cv_page_count,
         "layout_passed": layout_passed,
+        "ats_parse_passed": ats_validation.ats_parse_passed,
+        "ats_parse_notes": ats_validation.notes,
         "artifact_ids": [artifact["artifact_id"] for artifact in artifacts],
     }
-    result_payload = record.get("result", {})
     result_payload["artifacts"] = artifacts
     result_payload["layout_validation"] = {
         **previous_layout,
@@ -100,9 +154,12 @@ def export_run(run_id: str) -> ExportResponse:
         cv_path=exports["cv_path"],
         cover_letter_path=exports["cover_letter_path"],
         docs_url=exports["docs_url"],
-        docx_path=exports["cv_path"] if exports["cv_path"].endswith(".docx") else None,
-        pdf_path=exports["cv_path"] if exports["cv_path"].endswith(".pdf") else None,
+        docx_path=exports["docx_path"],
+        pdf_path=exports["pdf_path"],
+        html_path=exports["html_path"],
         page_count=cv_page_count,
         layout_passed=layout_passed,
+        ats_parse_passed=exports["ats_parse_passed"],
+        ats_parse_notes=exports["ats_parse_notes"],
         artifact_ids=exports["artifact_ids"],
     )

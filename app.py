@@ -24,16 +24,16 @@ load_dotenv()
 APPLE_CSS = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    
+
     html, body, [class*="css"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
     }
-    
+
     .stApp {
         background: linear-gradient(135deg, #1f2128 0%, #323842 100%);
         color: #ffffff;
     }
-    
+
     .glass-panel {
         background: rgba(30,30,35,0.7);
         backdrop-filter: blur(20px);
@@ -44,11 +44,11 @@ APPLE_CSS = """
         box-shadow: 0 8px 32px 0 rgba(31,38,135,0.07);
         margin-bottom: 24px;
     }
-    
+
     .loading-overlay {
         position: fixed;
         top: 0; left: 0; width: 100vw; height: 100vh;
-        background: #121216 !important; 
+        background: #121216 !important;
         z-index: 99999;
         display: flex !important;
         justify-content: center !important;
@@ -82,30 +82,30 @@ APPLE_CSS = """
         color: #d1d4d9;
     }
 
-    .log-line { 
-        margin-bottom: 14px; 
-        color: #e0e4eb; 
-        border-left: 4px solid #0071e3; 
-        padding-left: 20px; 
-        white-space: pre-wrap; 
-        word-wrap: break-word; 
+    .log-line {
+        margin-bottom: 14px;
+        color: #e0e4eb;
+        border-left: 4px solid #0071e3;
+        padding-left: 20px;
+        white-space: pre-wrap;
+        word-wrap: break-word;
     }
-    
-    .step-header { 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-        margin-bottom: 2rem; 
+
+    .step-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
     }
-    
-    .step-indicator { 
-        background: #0071e3; 
-        padding: 14px 28px; 
-        border-radius: 20px; 
-        font-weight: 700; 
-        font-size: 1.1rem; 
-        text-transform: uppercase; 
-        letter-spacing: 1.2px; 
+
+    .step-indicator {
+        background: #0071e3;
+        padding: 14px 28px;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 1.1rem;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
     }
 
     .nav-container-fixed {
@@ -115,7 +115,7 @@ APPLE_CSS = """
         justify-content: center;
         width: 100%;
     }
-    
+
     /* Post-Run Log Styles */
     .history-card {
         background: rgba(255,255,255,0.03);
@@ -346,7 +346,7 @@ def main():
     # ── 1. LOADING OVERLAY ──────────────────────────────────────────────────
     if st.session_state.workflow_is_running and st.session_state.workflow_generator:
         is_at_latest = (st.session_state.workflow_view_index == len(st.session_state.workflow_step_history) - 1)
-        
+
         should_rerun = False
         if is_at_latest or st.session_state.workflow_view_index == -1:
             if st.session_state.workflow_lock.acquire(blocking=False):
@@ -358,7 +358,7 @@ def main():
                         else:
                             st.session_state.workflow_step_history.append(update)
                     st.session_state.workflow_view_index = len(st.session_state.workflow_step_history) - 1
-                    
+
                     if update.partial_result:
                         st.session_state.final_workflow_result = update.partial_result
                         st.session_state.workflow_is_running = False
@@ -382,7 +382,7 @@ def main():
             curr = st.session_state.workflow_step_history[st.session_state.workflow_view_index]
             safe_lines = [html.escape(line) for line in curr.detail_lines]
             log_lines_html = "".join([f'<div class="log-line">{line}</div>' for line in safe_lines])
-            
+
             # Using st.empty() for a clean full-screen takeover if possible, otherwise fixed flex
             st.markdown(f"""
                 <div class="loading-overlay">
@@ -403,7 +403,7 @@ def main():
                     </div>
                 </div>
             """, unsafe_allow_html=True)
-            
+
             # Button layout using container but floating within the flex center
             btn_col1, btn_col2, btn_col3, btn_col4, btn_col5 = st.columns([1,2,2,2,1])
             with btn_col2:
@@ -414,7 +414,7 @@ def main():
                 if st.session_state.workflow_view_index < len(st.session_state.workflow_step_history) - 1:
                     if st.button("Next Agent Step →", key="btn_n_v6", use_container_width=True):
                         st.session_state.workflow_view_index += 1; st.rerun()
-            
+
             if is_at_latest and st.session_state.workflow_is_running:
                 time.sleep(0.1); st.rerun()
             st.stop()
@@ -457,9 +457,9 @@ def main():
 
     # ── 3. MAIN UI ───────────────────────────────────────────────────────────
     st.title("ApplAI - Smart CV Tailoring")
-    
+
     t_gen, t_lib = st.tabs(["Application Generator", "CV Library"])
-    
+
     with t_gen:
         st.markdown("<div class='glass-panel'>", unsafe_allow_html=True)
         st.markdown("<h3>1. Job Details</h3>", unsafe_allow_html=True)
@@ -474,7 +474,7 @@ def main():
                     st.session_state.job_desc_input = soup.get_text(separator="\n", strip=True)
                     st.rerun()
                 except: st.error("Scrape failed.")
-        
+
         st.text_area("Job Description", height=200, key="job_desc_input")
         c_co, c_ti = st.columns(2)
         st.session_state.extracted_co = c_co.text_input("Company Name", value=st.session_state.extracted_co, key="co_v6")
@@ -517,47 +517,53 @@ def main():
             if not os.path.exists(jpath):
                 st.error("Index a master CV first.")
             else:
-                with open(jpath, 'r', encoding='utf-8') as f: b_json = f.read()
-                parsed = json.loads(b_json)
-                template_path = ""
-                if parsed.get("source_docx"):
-                    template_path = os.path.join("docs", parsed["source_docx"])
-                elif parsed.get("source_file", "").endswith(".pdf"):
-                    template_path = os.path.join("docs", parsed["source_file"].replace(".pdf", ".docx"))
-                workflow_inputs = {
-                    "job_desc": st.session_state.job_desc_input,
-                    "base_cv_json_text": b_json,
-                    "company_name": st.session_state.extracted_co,
-                    "job_title": st.session_state.extracted_ti,
-                    "selected_cv_json": sel_json,
-                    "selected_model": sel_model,
-                    "quick_mode": run_mode == "Quick",
-                    "include_cover_letter": include_cover_letter,
-                    "include_ats": include_qa,
-                    "include_qa": include_qa,
-                    "allow_experience_rewrites": allow_exp_rw,
-                    "allow_education_rewrites": allow_edu_rw,
-                    "max_pages": int(max_pages),
-                    "output_mode": output_mode,
-                    "template_path": template_path,
-                    "template_config_path": parsed.get("template_config_path", ""),
-                }
-                st.session_state.update({'workflow_is_running': True, 'workflow_completed': False, 'workflow_step_history': [], 'workflow_inputs': workflow_inputs})
-                st.session_state.workflow_generator = agent_workflow.run_application_workflow_streaming(
-                    st.session_state.job_desc_input,
-                    b_json,
-                    sel_model,
-                    company_name=st.session_state.extracted_co,
-                    job_title=st.session_state.extracted_ti,
-                    quick_mode=workflow_inputs["quick_mode"],
-                    include_cover_letter=workflow_inputs["include_cover_letter"],
-                    include_ats=workflow_inputs["include_ats"],
-                    include_qa=workflow_inputs["include_qa"],
-                    allow_experience_rewrites=workflow_inputs["allow_experience_rewrites"],
-                    allow_education_rewrites=workflow_inputs["allow_education_rewrites"],
-                    max_pages=workflow_inputs["max_pages"],
-                )
-                st.rerun()
+                with open(jpath, 'r', encoding='utf-8') as f: cv_data = json.load(f)
+                status = cv_data.get("structure_status", "ok")
+                if status == "failed":
+                    st.error("Cannot start tailoring because the CV structure parsing has FAILED. Please review and correct the structure in the CV Structure Editor (PDF) section of the CV Library tab.")
+                elif status == "needs_review":
+                    st.error("Cannot start tailoring because this CV's structure is marked as 'needs_review'. Please review, adjust, and save the structure in the CV Structure Editor (PDF) section of the CV Library tab first.")
+                else:
+                    b_json = json.dumps(cv_data)
+                    template_path = ""
+                    if cv_data.get("source_docx"):
+                        template_path = os.path.join("docs", cv_data["source_docx"])
+                    elif cv_data.get("source_file", "").endswith(".pdf"):
+                        template_path = os.path.join("docs", cv_data["source_file"].replace(".pdf", ".docx"))
+                    workflow_inputs = {
+                        "job_desc": st.session_state.job_desc_input,
+                        "base_cv_json_text": b_json,
+                        "company_name": st.session_state.extracted_co,
+                        "job_title": st.session_state.extracted_ti,
+                        "selected_cv_json": sel_json,
+                        "selected_model": sel_model,
+                        "quick_mode": run_mode == "Quick",
+                        "include_cover_letter": include_cover_letter,
+                        "include_ats": include_qa,
+                        "include_qa": include_qa,
+                        "allow_experience_rewrites": allow_exp_rw,
+                        "allow_education_rewrites": allow_edu_rw,
+                        "max_pages": int(max_pages),
+                        "output_mode": output_mode,
+                        "template_path": template_path,
+                        "template_config_path": cv_data.get("template_config_path", ""),
+                    }
+                    st.session_state.update({'workflow_is_running': True, 'workflow_completed': False, 'workflow_inputs': workflow_inputs})
+                    st.session_state.workflow_generator = agent_workflow.run_application_workflow_streaming(
+                        st.session_state.job_desc_input,
+                        b_json,
+                        sel_model,
+                        company_name=st.session_state.extracted_co,
+                        job_title=st.session_state.extracted_ti,
+                        quick_mode=workflow_inputs["quick_mode"],
+                        include_cover_letter=workflow_inputs["include_cover_letter"],
+                        include_ats=workflow_inputs["include_ats"],
+                        include_qa=workflow_inputs["include_qa"],
+                        allow_experience_rewrites=workflow_inputs["allow_experience_rewrites"],
+                        allow_education_rewrites=workflow_inputs["allow_education_rewrites"],
+                        max_pages=workflow_inputs["max_pages"],
+                    )
+                    st.rerun()
         if master_json_files and sel_json != "No indexed masters":
             try:
                 selected_path = os.path.join("docs", "json_exports", sel_json)
@@ -604,7 +610,7 @@ def main():
                         st.error(f"Could not generate documents: {exc}")
                     st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
-            
+
             # --- AGENT EXECUTION HISTORY SECTION ---
             st.markdown("### 🛠 Agent Pipeline Execution History")
             st.markdown("Review the logic and comments from each individual module in the tailoring pipeline.")
@@ -744,6 +750,195 @@ def main():
             with open(os.path.join("docs/json_exports", up_pdf.name.replace(".pdf", ".json")), "w", encoding="utf-8") as f:
                 json.dump(js, f, indent=4)
             st.success("PDF indexed.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<div class='glass-panel'>", unsafe_allow_html=True)
+        st.markdown("<h3>CV Structure Editor (PDF)</h3>", unsafe_allow_html=True)
+
+        json_exports_dir = os.path.join("docs", "json_exports")
+        json_files = []
+        if os.path.exists(json_exports_dir):
+            json_files = [f for f in os.listdir(json_exports_dir) if f.endswith(".json")]
+
+        if json_files:
+            import copy
+            selected_cv_edit = st.selectbox("Select Indexed CV to edit/verify structure", json_files, key="cv_select_edit_pdf_v6")
+            jpath = os.path.join(json_exports_dir, selected_cv_edit)
+            if os.path.exists(jpath):
+                with open(jpath, 'r', encoding='utf-8') as f:
+                    cv_data = json.load(f)
+
+                if "structured_sections" not in cv_data:
+                    pdf_name = selected_cv_edit.replace(".json", ".pdf")
+                    pdf_path = os.path.join("docs", pdf_name)
+                    if os.path.exists(pdf_path):
+                        cv_data = pdf_parser.parse_pdf_to_json(pdf_path)
+                        with open(jpath, 'w', encoding='utf-8') as f:
+                            json.dump(cv_data, f, indent=4)
+
+                if "structured_sections" in cv_data:
+                    if "edit_cv_filename" not in st.session_state or st.session_state["edit_cv_filename"] != selected_cv_edit:
+                        st.session_state["edit_cv_filename"] = selected_cv_edit
+                        st.session_state["edit_cv_data"] = copy.deepcopy(cv_data)
+
+                    edit_data = st.session_state["edit_cv_data"]
+
+                    col_nav, col_cards = st.columns([1, 2])
+
+                    with col_nav:
+                        st.markdown("##### Detected Sections")
+                        sections = edit_data.get("structured_sections", [])
+                        for idx, sec in enumerate(sections):
+                            conf = sec.get("confidence", 1.0)
+                            source = sec.get("title_source", "manual")
+                            status_icon = "✅" if conf >= 0.75 and source != "inferred_content" else "⚠️"
+                            st.markdown(f"**{idx+1}. {sec.get('display_title')}** ({sec.get('canonical_type')}) {status_icon}")
+
+                        st.divider()
+                        st.markdown(f"**Status:** `{edit_data.get('structure_status', 'ok').upper()}`")
+                        warnings = edit_data.get("structure_warnings", [])
+                        if warnings:
+                            for w in warnings:
+                                st.warning(f"⚠️ {w}")
+                        else:
+                            st.success("No validation warnings.")
+
+                        if st.button("Save Structure Changes", key="btn_save_struct_pdf_v6", use_container_width=True):
+                            edit_data["structure_warnings"] = []
+                            edit_data["structure_status"] = "ok"
+
+                            present_types = {sec["canonical_type"] for sec in edit_data.get("structured_sections", [])}
+                            major_types = {"profile", "experience", "education"}
+                            missing_major = major_types - present_types
+                            if missing_major:
+                                edit_data["structure_warnings"].append(f"Missing major sections: {', '.join(missing_major)}")
+                                edit_data["structure_status"] = "needs_review"
+
+                            with open(jpath, 'w', encoding='utf-8') as f:
+                                json.dump(edit_data, f, indent=4)
+                            st.success("CV structure saved successfully!")
+                            st.rerun()
+
+                        if st.button("Approve Structure as OK", key="btn_approve_struct_pdf_v6", use_container_width=True):
+                            edit_data["structure_status"] = "ok"
+                            edit_data["structure_warnings"] = []
+                            with open(jpath, 'w', encoding='utf-8') as f:
+                                json.dump(edit_data, f, indent=4)
+                            st.success("CV structure approved!")
+                            st.rerun()
+
+                        st.markdown("---")
+                        st.markdown("###### Insert Missing Heading")
+                        new_sec_title = st.text_input("New Heading Name", key="new_sec_title_pdf_v6")
+                        new_sec_type = st.selectbox("New Heading Type", ["profile", "summary_qualifications", "experience", "education", "projects", "certifications", "additional"], key="new_sec_type_pdf_v6")
+                        insert_pos = st.number_input("Insert position (1-based index)", min_value=1, max_value=len(sections)+1, value=len(sections)+1, step=1, key="insert_pos_pdf_v6")
+                        if st.button("Insert Heading", key="btn_insert_sec_pdf_v6", use_container_width=True):
+                            if new_sec_title:
+                                new_sec = {
+                                    "section_id": f"sec_manual_{int(time.time())}",
+                                    "canonical_type": new_sec_type,
+                                    "display_title": new_sec_title,
+                                    "title_source": "manual",
+                                    "confidence": 1.0,
+                                    "page_start": 1,
+                                    "page_end": 1,
+                                    "line_start": 1,
+                                    "line_end": 1,
+                                    "body_lines": [],
+                                    "bullets": [],
+                                    "warnings": []
+                                }
+                                sections.insert(insert_pos - 1, new_sec)
+                                edit_data["structured_sections"] = sections
+                                st.success(f"Inserted section '{new_sec_title}'")
+                                st.rerun()
+
+                    with col_cards:
+                        st.markdown("##### Edit Section Details")
+                        sections = edit_data.get("structured_sections", [])
+                        for idx, sec in enumerate(sections):
+                            with st.expander(f"Section {idx+1}: {sec.get('display_title')} ({sec.get('canonical_type')})", expanded=True):
+                                col_t, col_c = st.columns(2)
+                                sec_title = col_t.text_input("Section Title", value=sec.get("display_title", ""), key=f"title_pdf_{selected_cv_edit}_{idx}")
+                                types_list = ["profile", "summary_qualifications", "experience", "education", "projects", "certifications", "additional"]
+                                type_idx = types_list.index(sec.get("canonical_type")) if sec.get("canonical_type") in types_list else 0
+                                sec_type = col_c.selectbox("Canonical Type", types_list, index=type_idx, key=f"type_pdf_{selected_cv_edit}_{idx}")
+
+                                if sec_title != sec.get("display_title") or sec_type != sec.get("canonical_type"):
+                                    sec["display_title"] = sec_title
+                                    sec["canonical_type"] = sec_type
+                                    sec["title_source"] = "manual"
+                                    sec["confidence"] = 1.0
+
+                                body_text_val = "\n".join(sec.get("body_lines", []))
+                                new_body_text = st.text_area("Body Text (One line per row)", value=body_text_val, height=120, key=f"body_pdf_{selected_cv_edit}_{idx}")
+                                if new_body_text != body_text_val:
+                                    new_lines = new_body_text.splitlines()
+                                    sec["body_lines"] = new_lines
+                                    sec["title_source"] = "manual"
+                                    sec["confidence"] = 1.0
+                                    sec["bullets"] = []
+                                    for line_idx, line in enumerate(new_lines):
+                                        line_stripped = line.strip()
+                                        bullet_chars = ('•', '●', '■', '▪', '⁃', '◦', '·')
+                                        is_bullet = line_stripped.startswith(bullet_chars) or (line_stripped.startswith('-') and not line_stripped.startswith('--')) or (line_stripped.startswith('*') and not line_stripped.startswith('**'))
+                                        if is_bullet:
+                                            sec["bullets"].append({
+                                                "text": line_stripped,
+                                                "line_start": sec.get("line_start", 1) + line_idx + 1,
+                                                "line_end": sec.get("line_start", 1) + line_idx + 1
+                                            })
+
+                                col_act1, col_act2 = st.columns(2)
+                                if idx < len(sections) - 1:
+                                    if col_act1.button(f"Merge with Section {idx+2}", key=f"merge_pdf_{selected_cv_edit}_{idx}"):
+                                        sec["body_lines"].extend(sections[idx+1].get("body_lines", []))
+                                        sec["bullets"].extend(sections[idx+1].get("bullets", []))
+                                        sec["page_end"] = sections[idx+1].get("page_end", sec["page_end"])
+                                        sec["line_end"] = sections[idx+1].get("line_end", sec["line_end"])
+                                        sec["title_source"] = "manual"
+                                        sec["confidence"] = 1.0
+                                        sections.pop(idx+1)
+                                        edit_data["structured_sections"] = sections
+                                        st.success("Merged adjacent sections")
+                                        st.rerun()
+
+                                if sec.get("body_lines"):
+                                    line_options = [f"{i}: {line[:30]}..." for i, line in enumerate(sec["body_lines"])]
+                                    split_line_sel = col_act2.selectbox("Split Section at Line", ["Select Line..."] + line_options, key=f"split_sel_pdf_{selected_cv_edit}_{idx}")
+                                    if split_line_sel != "Select Line...":
+                                        split_line_idx = int(split_line_sel.split(":")[0])
+                                        split_title = col_act2.text_input("New Heading Name", value="New Inferred Heading", key=f"split_title_pdf_{selected_cv_edit}_{idx}")
+                                        if col_act2.button("Confirm Split Section", key=f"btn_split_pdf_{selected_cv_edit}_{idx}"):
+                                            lines_before = sec["body_lines"][:split_line_idx]
+                                            lines_after = sec["body_lines"][split_line_idx:]
+
+                                            new_sec = {
+                                                "section_id": f"sec_split_{int(time.time())}",
+                                                "canonical_type": sec["canonical_type"],
+                                                "display_title": split_title,
+                                                "title_source": "manual",
+                                                "confidence": 1.0,
+                                                "page_start": sec["page_start"],
+                                                "page_end": sec["page_end"],
+                                                "line_start": sec["line_start"] + split_line_idx,
+                                                "line_end": sec["line_end"],
+                                                "body_lines": lines_after,
+                                                "bullets": [b for b in sec["bullets"] if b.get("line_start", 0) >= sec["line_start"] + split_line_idx],
+                                                "warnings": []
+                                            }
+                                            sec["body_lines"] = lines_before
+                                            sec["bullets"] = [b for b in sec["bullets"] if b.get("line_start", 0) < sec["line_start"] + split_line_idx]
+                                            sec["line_end"] = sec["line_start"] + split_line_idx - 1
+                                            sec["title_source"] = "manual"
+                                            sec["confidence"] = 1.0
+
+                                            sections.insert(idx + 1, new_sec)
+                                            edit_data["structured_sections"] = sections
+                                            st.success(f"Split section '{sec['display_title']}' at line {split_line_idx}")
+                                            st.rerun()
+        else:
+            st.info("No indexed CVs available to edit.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":

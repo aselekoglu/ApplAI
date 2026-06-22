@@ -187,7 +187,7 @@ class WorkflowResult:
     ats_report: ATSReport = field(default_factory=ATSReport.model_construct)
     cover_letter: str = ""
 
-    #  Legacy fields so app.py: result.tasks_output and result.pydantic still work 
+    #  Legacy fields so app.py: result.tasks_output and result.pydantic still work
     @property
     def pydantic(self):
         """Return the QA report as the top-level pydantic result (legacy compat)."""
@@ -333,6 +333,12 @@ def _build_cv_loader_prompt(raw_text: str, allow_experience_rewrites: bool, allo
     )
 
 
+DATE_RANGE_PATTERN = re.compile(
+    r'\b(?:\d{4}|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*(?:\d{4})?\s*[-–—]\s*(?:\d{4}|Present|Current|Ongoing|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*(?:\d{4})?\b',
+    re.IGNORECASE
+)
+
+
 def load_canonical_cv(
     raw_json: dict,
     model_name: str = "gemini-2.5-flash",
@@ -340,22 +346,549 @@ def load_canonical_cv(
     allow_education_rewrites: bool = False,
 ) -> CanonicalCV:
     """
-    Module 1: Convert raw {source_file, raw_text} JSON into a CanonicalCV.
-    Uses LLM to structure the text. Falls back to a minimal model on failure.
+    Module 1: Convert raw {source_file, raw_text, structured_sections} JSON into a CanonicalCV.
+    Prefers structured_sections if present and usable. Falls back to LLM structuring
+    from raw_text if structured_sections is absent or status is failed.
     """
-    raw_text = raw_json.get("raw_text", "")
     source_file = raw_json.get("source_file", "unknown")
+    raw_text = raw_json.get("raw_text", "")
+    raw_sections = raw_json.get("sections") or raw_json.get("structured_sections", [])
+    structure_status = raw_json.get("structure_status", "")
+    if not structure_status and raw_sections:
+        structure_status = "ok"
 
+    structured_sections = []
+    for s in raw_sections:
+        s_copy = dict(s)
+        ctype = s_copy.get("canonical_type") or s_copy.get("kind") or "other"
+        if ctype == "experience_block":
+            ctype = "experience"
+        elif ctype == "skills":
+            ctype = "summary_qualifications"
+        s_copy["canonical_type"] = ctype
+        if "body_lines" not in s_copy:
+            body_text = s_copy.get("body_text", "")
+            s_copy["body_lines"] = body_text.splitlines()
+        structured_sections.append(s_copy)
+
+    if structured_sections and structure_status != "failed":
+        print(f"[CV Loader] [OK] Loading CV from structured_sections...")
+        try:
+            # 1. Build contact from the contact block and top lines
+            contact_lines = []
+            for sec in structured_sections:
+                if sec.get("canonical_type") == "contact" or sec.get("section_id") == "contact":
+                    contact_lines = sec.get("body_lines", [])
+                    break
+            if not contact_lines and structured_sections:
+                if structured_sections[0].get("canonical_type") in ("contact", "profile"):
+                    contact_lines = structured_sections[0].get("body_lines", [])
+
+            full_name = ""
+            email = ""
+            phone = ""
+            linkedin = ""
+            github = ""
+            city = ""
+
+            search_lines = contact_lines if contact_lines else (structured_sections[0].get("body_lines", []) if structured_sections else [])
+            for line in search_lines:
+                line_stripped = line.strip()
+                if not line_stripped:
+                    continue
+                if "@" in line_stripped or "linkedin.com" in line_stripped.lower() or "github.com" in line_stripped.lower():
+                    continue
+                if any(c.isalpha() for c in line_stripped) and len(line_stripped.split()) <= 4:
+                    full_name = line_stripped
+                    break
+
+            if not full_name:
+                full_name = source_file.replace(".pdf", "").replace(".json", "")
+
+            for line in search_lines:
+                line_text = line.strip()
+                email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', line_text)
+                if email_match and not email:
+                    email = email_match.group(0)
+                phone_match = re.search(r'\b(?:\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b', line_text)
+                if phone_match and not phone:
+                    phone = phone_match.group(0)
+                linkedin_match = re.search(r'linkedin\.com/\S+', line_text)
+                if linkedin_match and not linkedin:
+                    linkedin = linkedin_match.group(0)
+                github_match = re.search(r'github\.com/\S+', line_text)
+                if github_match and not github:
+                    github = github_match.group(0)
+                city_match = re.search(r'\b([A-Z][a-zA-Z\s]+),\s*([A-Z]{2}|[A-Z][a-zA-Z]+)\b', line_text)
+                if city_match and not city:
+                    city = city_match.group(0)
+
+            contact = {
+                "city": city,
+                "phone": phone,
+                "email": email,
+                "linkedin": linkedin,
+                "github": github
+            }
+
+            # 2. Convert profile bullets
+            profile_bullets = []
+            prof_idx = 0
+            for sec in structured_sections:
+                if sec.get("canonical_type") == "profile":
+                    for b in sec.get("bullets", []):
+                        profile_bullets.append(BulletEvidence(
+                            bullet_id=f"prof_{prof_idx}",
+                            text=b.get("text", ""),
+                            section="profile",
+                            employer="",
+                            role="",
+                            domain_tags=[],
+                            is_locked=False
+                        ))
+                        prof_idx += 1
+
+            # 3. Convert summary_qualifications into skills_sections
+            skills_sections = {}
+            for sec in structured_sections:
+                if sec.get("canonical_type") == "summary_qualifications":
+                    for line in sec.get("body_lines", []):
+                        if ":" in line:
+                            parts = line.split(":", 1)
+                            cat = parts[0].strip()
+                            skills = [s.strip() for s in parts[1].split(",") if s.strip()]
+                            skills_sections[cat] = skills
+                    if not skills_sections and sec.get("bullets"):
+                        skills_sections["Key Qualifications"] = [b.get("text") for b in sec.get("bullets")]
+
+            # 4. Convert experience entries
+            experience_entries = []
+            exp_idx = 0
+            keywords_map = {
+                "python": ["python"],
+                "javascript": ["javascript", "js", "typescript", "ts", "node"],
+                "java": ["java", "spring"],
+                "sql": ["sql", "mysql", "postgres", "database", "query"],
+                "api": ["api", "apis", "rest", "soap", "endpoint"],
+                "automation": ["automation", "automate", "scripting", "selenium", "playwright"],
+                "data": ["data", "etl", "analytics", "visualization", "pandas", "numpy"],
+                "ml": ["ml", "machine learning", "tensorflow", "pytorch", "scikit"],
+                "ai": ["ai", "artificial intelligence", "llm", "openai", "gemini"],
+                "analysis": ["analysis", "analyze", "analyst", "reporting"],
+                "fullstack": ["fullstack", "full-stack", "django", "react", "vue", "angular"],
+                "backend": ["backend", "back-end", "server", "django", "flask", "fastapi"],
+                "frontend": ["frontend", "front-end", "html", "css", "react"],
+                "crm": ["crm", "salesforce", "hubspot"],
+                "cloud": ["cloud", "aws", "gcp", "azure", "docker", "kubernetes"],
+                "agile": ["agile", "scrum", "jira", "sprint"],
+                "management": ["management", "manage", "led", "leader", "project manager"],
+                "finance": ["finance", "financial", "budget", "billing"],
+                "telecom": ["telecom", "telecommunication", "network", "sip"],
+                "writing": ["writing", "documentation", "technical writer", "report"],
+                "integration": ["integration", "integrate", "integrating"],
+                "testing": ["testing", "test", "qa", "pytest", "unit test"]
+            }
+
+            for sec in structured_sections:
+                if sec.get("canonical_type") != "experience":
+                    continue
+
+                if sec.get("title_line") or sec.get("employer_line"):
+                    employer = sec.get("employer_line") or "Unknown Employer"
+                    role = sec.get("title_line") or "Role"
+                    date_str = sec.get("date_line") or ""
+                    start_date = ""
+                    end_date = ""
+                    if date_str:
+                        date_parts = re.split(r'[-–—]', date_str)
+                        if len(date_parts) == 2:
+                            start_date = date_parts[0].strip()
+                            end_date = date_parts[1].strip()
+                        else:
+                            start_date = date_str
+                            end_date = "Present"
+
+                    entry_bullets = []
+                    bullet_counter = 0
+                    bullet_texts = []
+                    if sec.get("bullets"):
+                        bullet_texts = [b.get("text") for b in sec.get("bullets") if b.get("text")]
+                    else:
+                        bullet_texts = [l for l in sec.get("body_lines", []) if l.strip()]
+
+                    for text in bullet_texts:
+                        text_clean = re.sub(r'^[\-\*•●■▪⁃◦◦·\s]+', '', text).strip()
+                        if not text_clean:
+                            continue
+                        domain_tags = []
+                        text_lower = text_clean.lower()
+                        for tag, kws in keywords_map.items():
+                            if any(kw in text_lower for kw in kws):
+                                domain_tags.append(tag)
+                        entry_bullets.append(BulletEvidence(
+                            bullet_id=f"exp_{exp_idx}_{bullet_counter}",
+                            text=text_clean,
+                            section="experience",
+                            employer=employer,
+                            role=role,
+                            domain_tags=domain_tags[:5],
+                            is_locked=not allow_experience_rewrites
+                        ))
+                        bullet_counter += 1
+
+                    experience_entries.append(ExperienceEntry(
+                        employer=employer,
+                        role=role,
+                        start_date=start_date if start_date else "2020",
+                        end_date=end_date if end_date else "Present",
+                        location="",
+                        bullets=entry_bullets
+                    ))
+                    exp_idx += 1
+                    continue
+
+                body_lines = sec.get("body_lines", [])
+                entry_indices = []
+                for idx, line in enumerate(body_lines):
+                    bullet_chars = ('•', '●', '■', '▪', '⁃', '◦', '·')
+                    is_bullet = line.strip().startswith(bullet_chars) or (line.strip().startswith('-') and not line.strip().startswith('--'))
+                    if not is_bullet and DATE_RANGE_PATTERN.search(line):
+                        entry_indices.append(idx)
+                if not entry_indices and body_lines:
+                    for idx, line in enumerate(body_lines):
+                        bullet_chars = ('•', '●', '■', '▪', '⁃', '◦', '·')
+                        is_bullet = line.strip().startswith(bullet_chars) or (line.strip().startswith('-') and not line.strip().startswith('--'))
+                        if not is_bullet:
+                            entry_indices.append(idx)
+                            break
+
+                for k, start_idx in enumerate(entry_indices):
+                    end_idx = entry_indices[k+1] if k + 1 < len(entry_indices) else len(body_lines)
+                    entry_lines = body_lines[start_idx:end_idx]
+
+                    header_line = entry_lines[0]
+                    date_match = DATE_RANGE_PATTERN.search(header_line)
+                    start_date = ""
+                    end_date = ""
+                    role = header_line
+                    if date_match:
+                        date_str = date_match.group(0)
+                        date_parts = re.split(r'[-–—]', date_str)
+                        if len(date_parts) == 2:
+                            start_date = date_parts[0].strip()
+                            end_date = date_parts[1].strip()
+                        else:
+                            start_date = date_str
+                            end_date = "Present"
+                        role = header_line.replace(date_str, "").strip()
+                        role = re.sub(r'[\s,–\-—]+$', '', role).strip()
+
+                    employer = "Unknown Employer"
+                    location = ""
+                    bullets_start_idx = 1
+                    if len(entry_lines) > 1:
+                        second_line = entry_lines[1]
+                        bullet_chars = ('•', '●', '■', '▪', '⁃', '◦', '·')
+                        is_bullet = second_line.strip().startswith(bullet_chars) or (second_line.strip().startswith('-') and not second_line.strip().startswith('--'))
+                        if not is_bullet:
+                            emp_loc = second_line.strip()
+                            if "," in emp_loc:
+                                parts = emp_loc.split(",", 1)
+                                employer = parts[0].strip()
+                                location = parts[1].strip()
+                            else:
+                                employer = emp_loc
+                            bullets_start_idx = 2
+
+                    entry_bullets = []
+                    bullet_counter = 0
+                    for line in entry_lines[bullets_start_idx:]:
+                        line_stripped = line.strip()
+                        if not line_stripped:
+                            continue
+                        text_clean = re.sub(r'^[\-\*•●■▪⁃◦◦·\s]+', '', line_stripped).strip()
+
+                        domain_tags = []
+                        text_lower = text_clean.lower()
+                        for tag, kws in keywords_map.items():
+                            if any(kw in text_lower for kw in kws):
+                                domain_tags.append(tag)
+
+                        entry_bullets.append(BulletEvidence(
+                            bullet_id=f"exp_{exp_idx}_{bullet_counter}",
+                            text=text_clean,
+                            section="experience",
+                            employer=employer,
+                            role=role,
+                            domain_tags=domain_tags[:5],
+                            is_locked=not allow_experience_rewrites
+                        ))
+                        bullet_counter += 1
+
+                    experience_entries.append(ExperienceEntry(
+                        employer=employer,
+                        role=role,
+                        start_date=start_date if start_date else "2020",
+                        end_date=end_date if end_date else "Present",
+                        location=location,
+                        bullets=entry_bullets
+                    ))
+                    exp_idx += 1
+
+            # 5. Convert education entries
+            education_entries = []
+            edu_idx = 0
+            for sec in structured_sections:
+                if sec.get("canonical_type") != "education":
+                    continue
+
+                if sec.get("title_line") or sec.get("employer_line"):
+                    institution = sec.get("employer_line") or "Unknown Institution"
+                    degree = sec.get("title_line") or "Degree"
+                    field_of_study = sec.get("role_label") or "General"
+                    date_str = sec.get("date_line") or ""
+                    start_date = "2020"
+                    end_date = "Present"
+                    if date_str:
+                        years = re.findall(r'\b\d{4}\b', date_str)
+                        if len(years) >= 2:
+                            start_date, end_date = years[0], years[1]
+                        elif len(years) == 1:
+                            start_date = years[0]
+                            end_date = "Present"
+
+                    edu_bullets = []
+                    bullet_counter = 0
+                    bullet_texts = []
+                    if sec.get("bullets"):
+                        bullet_texts = [b.get("text") for b in sec.get("bullets") if b.get("text")]
+                    else:
+                        bullet_texts = [l for l in sec.get("body_lines", []) if l.strip()]
+
+                    for text in bullet_texts:
+                        text_clean = re.sub(r'^[\-\*•●■▪⁃◦◦·\s]+', '', text).strip()
+                        if not text_clean:
+                            continue
+                        edu_bullets.append(BulletEvidence(
+                            bullet_id=f"edu_{edu_idx}_{bullet_counter}",
+                            text=text_clean,
+                            section="education",
+                            employer=institution,
+                            role=degree,
+                            domain_tags=[],
+                            is_locked=not allow_education_rewrites
+                        ))
+                        bullet_counter += 1
+
+                    education_entries.append(EducationEntry(
+                        institution=institution,
+                        degree=degree,
+                        field_of_study=field_of_study,
+                        start_date=start_date,
+                        end_date=end_date,
+                        bullets=edu_bullets
+                    ))
+                    edu_idx += 1
+                    continue
+
+                body_lines = sec.get("body_lines", [])
+                non_bullet_lines = []
+                for line in body_lines:
+                    line_stripped = line.strip()
+                    bullet_chars = ('•', '●', '■', '▪', '⁃', '◦', '·')
+                    is_bullet = line_stripped.startswith(bullet_chars) or (line_stripped.startswith('-') and not line_stripped.startswith('--'))
+                    if not is_bullet and line_stripped:
+                        non_bullet_lines.append(line_stripped)
+
+                institution = "Unknown Institution"
+                degree = "Degree"
+                field_of_study = "General"
+                start_date = "2020"
+                end_date = "Present"
+
+                if len(non_bullet_lines) >= 2:
+                    degree = non_bullet_lines[0]
+                    institution = non_bullet_lines[1]
+                    years = re.findall(r'\b\d{4}\b', " ".join(non_bullet_lines))
+                    if len(years) >= 2:
+                        start_date, end_date = years[0], years[1]
+                    elif len(years) == 1:
+                        start_date = years[0]
+                        end_date = "Present"
+                elif len(non_bullet_lines) == 1:
+                    degree = non_bullet_lines[0]
+
+                edu_bullets = []
+                bullet_counter = 0
+                for line in body_lines:
+                    line_stripped = line.strip()
+                    bullet_chars = ('•', '●', '■', '▪', '⁃', '◦', '·')
+                    is_bullet = line_stripped.startswith(bullet_chars) or (line_stripped.startswith('-') and not line_stripped.startswith('--')) or (line_stripped.startswith('*') and not line_stripped.startswith('**'))
+                    if is_bullet:
+                        text_clean = re.sub(r'^[\-\*•●■▪⁃◦◦·\s]+', '', line_stripped).strip()
+                        edu_bullets.append(BulletEvidence(
+                            bullet_id=f"edu_{edu_idx}_{bullet_counter}",
+                            text=text_clean,
+                            section="education",
+                            employer=institution,
+                            role=degree,
+                            domain_tags=[],
+                            is_locked=not allow_education_rewrites
+                        ))
+                        bullet_counter += 1
+
+                education_entries.append(EducationEntry(
+                    institution=institution,
+                    degree=degree,
+                    field_of_study=field_of_study,
+                    start_date=start_date,
+                    end_date=end_date,
+                    bullets=edu_bullets
+                ))
+                edu_idx += 1
+
+            # 6. Convert projects entries
+            project_entries = []
+            proj_idx = 0
+            for sec in structured_sections:
+                if sec.get("canonical_type") != "projects":
+                    continue
+
+                if sec.get("title_line") or sec.get("employer_line"):
+                    title = sec.get("title_line") or "Project"
+                    date_str = sec.get("date_line") or ""
+                    bullet_texts = []
+                    if sec.get("bullets"):
+                        bullet_texts = [b.get("text") for b in sec.get("bullets") if b.get("text")]
+                    else:
+                        bullet_texts = [l for l in sec.get("body_lines", []) if l.strip()]
+
+                    entry_bullets = []
+                    bullet_counter = 0
+                    for text in bullet_texts:
+                        text_clean = re.sub(r'^[\-\*•●■▪⁃◦◦·\s]+', '', text).strip()
+                        if not text_clean:
+                            continue
+                        domain_tags = []
+                        if any(w in text_clean.lower() for w in ["python", "django", "flask", "fastapi"]):
+                            domain_tags.append("python")
+                        if any(w in text_clean.lower() for w in ["js", "react", "vue", "angular", "javascript"]):
+                            domain_tags.append("javascript")
+                        if "api" in text_clean.lower():
+                            domain_tags.append("api")
+                        if "data" in text_clean.lower():
+                            domain_tags.append("data")
+
+                        entry_bullets.append(BulletEvidence(
+                            bullet_id=f"proj_{proj_idx}_{bullet_counter}",
+                            text=text_clean,
+                            section="projects",
+                            employer="",
+                            role=title,
+                            domain_tags=domain_tags,
+                            is_locked=False
+                        ))
+                        bullet_counter += 1
+
+                    project_entries.append(ProjectEntry(
+                        title=title,
+                        date=date_str,
+                        institution="",
+                        bullets=entry_bullets
+                    ))
+                    proj_idx += 1
+                    continue
+
+                body_lines = sec.get("body_lines", [])
+                entry_indices = []
+                for idx, line in enumerate(body_lines):
+                    bullet_chars = ('•', '●', '■', '▪', '⁃', '◦', '·')
+                    is_bullet = line.strip().startswith(bullet_chars) or (line.strip().startswith('-') and not line.strip().startswith('--'))
+                    if not is_bullet and line.strip():
+                        entry_indices.append(idx)
+                if not entry_indices and body_lines:
+                    entry_indices.append(0)
+
+                for k, start_idx in enumerate(entry_indices):
+                    end_idx = entry_indices[k+1] if k + 1 < len(entry_indices) else len(body_lines)
+                    entry_lines = body_lines[start_idx:end_idx]
+
+                    header_line = entry_lines[0].strip()
+                    date_match = re.search(r'\b(?:\d{4}|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*(?:\d{4})?\b', header_line, re.IGNORECASE)
+                    date_str = ""
+                    title = header_line
+                    if date_match:
+                        date_str = date_match.group(0)
+                        title = header_line.replace(date_str, "").strip()
+                        title = re.sub(r'[\s,–\-—]+$', '', title).strip()
+
+                    bullets_start_idx = 1
+                    entry_bullets = []
+                    bullet_counter = 0
+                    for line in entry_lines[bullets_start_idx:]:
+                        line_stripped = line.strip()
+                        if not line_stripped:
+                            continue
+                        text_clean = re.sub(r'^[\-\*•●■▪⁃◦◦·\s]+', '', line_stripped).strip()
+
+                        domain_tags = []
+                        if any(w in text_clean.lower() for w in ["python", "django", "flask", "fastapi"]):
+                            domain_tags.append("python")
+                        if any(w in text_clean.lower() for w in ["js", "react", "vue", "angular", "javascript"]):
+                            domain_tags.append("javascript")
+                        if "api" in text_clean.lower():
+                            domain_tags.append("api")
+                        if "data" in text_clean.lower():
+                            domain_tags.append("data")
+
+                        entry_bullets.append(BulletEvidence(
+                            bullet_id=f"proj_{proj_idx}_{bullet_counter}",
+                            text=text_clean,
+                            section="projects",
+                            employer="",
+                            role=title,
+                            domain_tags=domain_tags,
+                            is_locked=False
+                        ))
+                        bullet_counter += 1
+
+                    project_entries.append(ProjectEntry(
+                        title=title,
+                        date=date_str,
+                        institution="",
+                        bullets=entry_bullets
+                    ))
+                    proj_idx += 1
+
+            # 7. Store additional as locked additional text
+            additional_text = ""
+            for sec in structured_sections:
+                if sec.get("canonical_type") in ("additional", "certifications"):
+                    additional_text += "\n".join(sec.get("body_lines", [])) + "\n"
+            additional_text = additional_text.strip()
+
+            return CanonicalCV(
+                full_name=full_name,
+                contact=contact,
+                profile_bullets=profile_bullets,
+                skills_sections=skills_sections,
+                experience=experience_entries,
+                projects=project_entries,
+                education=education_entries,
+                additional=additional_text
+            )
+        except Exception as e:
+            print(f"[CV Loader] [WARN] Sectionized CV loading failed: {e}. Falling back to LLM parsing.")
+
+    # Legacy fallback: use the LLM to structure from raw_text
     prompt = _build_cv_loader_prompt(raw_text, allow_experience_rewrites, allow_education_rewrites)
-
     try:
         data = _call_gemini_json(prompt, model_name)
         cv = CanonicalCV.model_validate(data)
-        print(f"[CV Loader] [OK] Structured CV loaded: {cv.full_name}")
+        print(f"[CV Loader] [OK] Structured CV loaded via LLM: {cv.full_name}")
         return cv
     except Exception as e:
-        print(f"[CV Loader] [WARN] LLM structuring failed ({e}). Using fallback.")
-        # Minimal fallback: wrap raw text as a single profile bullet
+        print(f"[CV Loader] [WARN] LLM structuring failed ({e}). Using minimal fallback.")
         return CanonicalCV(
             full_name=source_file.replace(".pdf", "").replace(".json", ""),
             profile_bullets=[
@@ -877,19 +1410,19 @@ def validate_qa(
         req_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', req_text))
         tailored_text_blob = " ".join(s.new_text or s.original_text for s in selected).lower()
         tailored_words = set(re.findall(r'\b[a-zA-Z]{3,}\b', tailored_text_blob))
-        
-        # Smart overlap: for long requirements with many alternatives (commas/or), 
+
+        # Smart overlap: for long requirements with many alternatives (commas/or),
         # a single keyword match might be enough (e.g. "MIS" in a list of 10 degrees).
         # We check the raw count of matches vs the required threshold.
         matches = req_words & tailored_words
         overlap = len(matches) / max(len(req_words), 1)
-        
+
         # If requirement is long (>10 words), decrease threshold or check for specific keyword hits
         is_match = overlap >= 0.4
         if not is_match and len(req_words) > 8:
             if len(matches) >= 2 or (len(matches) >= 1 and any(m in ["mis", "cs", "python", "ml", "sql", "aws", "azure"] for m in matches)):
                 is_match = True
-        
+
         if is_match:
             strong.append(req.requirement)
         elif req.priority == "must_have":
@@ -1065,7 +1598,7 @@ def run_application_workflow(
     except Exception:
         raw_json = {"raw_text": base_cv_json_text, "source_file": "unknown"}
 
-    #  Module 1: CV Loader 
+    #  Module 1: CV Loader
     print("\n[1/8] CV Loader...")
     canonical_cv = load_canonical_cv(
         raw_json,
@@ -1074,19 +1607,19 @@ def run_application_workflow(
         allow_education_rewrites=allow_education_rewrites,
     )
 
-    #  Module 2: JD Parser 
+    #  Module 2: JD Parser
     print("\n[2/8] JD Parser...")
     jd_analysis = parse_jd(job_description, model_name)
 
-    #  Module 3: Evidence Mapper 
+    #  Module 3: Evidence Mapper
     print("\n[3/8] Evidence Mapper...")
     scored_bullets = map_evidence(canonical_cv, jd_analysis)
 
-    #  Module 4: Strategy Planner 
+    #  Module 4: Strategy Planner
     print("\n[4/8] Strategy Planner...")
     edit_plan = plan_strategy(jd_analysis, scored_bullets, quick_mode=quick_mode, max_pages=max_pages)
 
-    #  Module 5: Bullet Selector / Rewriter 
+    #  Module 5: Bullet Selector / Rewriter
     print("\n[5/8] Bullet Selector / Rewriter...")
     tailored_output = select_and_rewrite(
         canonical_cv,
@@ -1098,17 +1631,17 @@ def run_application_workflow(
         allow_education_rewrites=allow_education_rewrites,
     )
 
-    #  Module 6: Cover Letter Writer 
+    #  Module 6: Cover Letter Writer
     print("\n[6/8] Cover Letter Writer...")
     cover_letter = ""
     if include_cover_letter:
         cover_letter = write_cover_letter(tailored_output, jd_analysis, canonical_cv, company_name, job_title, model_name)
 
-    #  Module 7: ATS Analyzer 
+    #  Module 7: ATS Analyzer
     print("\n[7/8] ATS Analyzer...")
     ats_report = analyze_ats(jd_analysis, tailored_output, canonical_cv) if include_ats else ATSReport()
 
-    #  Module 8: QA Validator 
+    #  Module 8: QA Validator
     print("\n[8a/8] QA Validator...")
     qa_report = (
         validate_qa(tailored_output, canonical_cv, jd_analysis, ats_report, model_name, max_pages=max_pages)
@@ -1116,7 +1649,7 @@ def run_application_workflow(
         else QAReport(matching_rate_score=int(ats_report.coverage_pct) if include_ats else 0, feedback="QA checks skipped by user option.")
     )
 
-    #  Change Log 
+    #  Change Log
     print("\n[8b/8] Change Log Generator...")
     change_log = generate_change_log(tailored_output)
 

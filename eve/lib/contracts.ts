@@ -212,6 +212,9 @@ export interface ArtifactMetadata {
   path: string;
   page_count?: number | null;
   layout_passed?: boolean | null;
+  html_path?: string | null;
+  ats_parse_passed?: boolean | null;
+  ats_parse_notes?: string[];
 }
 
 export interface TailorCvOutput {
@@ -250,8 +253,11 @@ export interface RenderCvOutput {
   cover_letter_path: string;
   docx_path?: string | null;
   pdf_path?: string | null;
+  html_path?: string | null;
   page_count?: number | null;
   layout_passed?: boolean | null;
+  ats_parse_passed?: boolean | null;
+  ats_parse_notes?: string[];
   artifact_ids: string[];
   docs_url?: string | null;
 }

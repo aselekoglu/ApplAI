@@ -11,6 +11,7 @@ import agent_workflow
 from api.app.config import settings
 from api.app.schemas.career_brain import CareerBrainProfile, EvidenceBlock, SkillInventory
 from api.app.schemas.jobs import ScoreJobRequest
+from api.app.schemas.resume_render import PdfTextValidation
 from api.app.services.export_service import export_run
 from api.app.services.career_brain_service import save_career_brain_profile
 from api.app.services.job_scoring_service import score_job
@@ -294,7 +295,7 @@ class TailoringServiceSprint3Test(unittest.TestCase):
         self.assertEqual(response.result.approval_status, "draft")
         self.assertNotIn("ready_to_submit", response.model_dump_json())
 
-    def test_export_records_pdf_page_count_and_layout_failure(self) -> None:
+    def test_export_writes_html_pdf_as_final_cv_and_preserves_docx_compatibility(self) -> None:
         with patch("api.app.services.tailoring_service.run_tailoring", side_effect=self._fake_workflow_result):
             response = run_tailoring_job(
                 TailorRunRequest(
@@ -304,12 +305,100 @@ class TailoringServiceSprint3Test(unittest.TestCase):
                 )
             )
 
-        pdf_path = str(Path(settings.docs_dir, "Ata_CV_Tailored_CoreCo.pdf"))
+        docx_path = str(Path(settings.docs_dir, "Ata_CV_Tailored_CoreCo.docx"))
         cover_path = str(Path(settings.docs_dir, "Ata_CL_Tailored_CoreCo.pdf"))
-        Path(pdf_path).write_bytes(b"%PDF-1.4 placeholder")
+        Path(docx_path).write_bytes(b"docx placeholder")
         Path(cover_path).write_bytes(b"%PDF-1.4 placeholder")
         artifact_data = {
-            "cv_path": pdf_path,
+            "cv_path": docx_path,
+            "cl_path": cover_path,
+            "docs_url": None,
+            "cv_bytes": b"",
+            "cl_bytes": b"",
+            "cover_letter_text": "Draft cover letter.",
+        }
+        validation = PdfTextValidation(
+            ats_parse_passed=True,
+            extracted_text="Ata Selekoglu PROFILE Python FastAPI automation",
+            notes=["PDF text extraction passed ATS readability checks."],
+        )
+
+        returned_pdf = str(Path(settings.docs_dir, "renderer-returned", "Selekoglu_CV_Tailored_CoreCo.pdf"))
+
+        with patch("api.app.services.export_service.render_run_artifacts", return_value=artifact_data), patch(
+            "api.app.services.export_service.render_resume_pdf",
+            return_value=returned_pdf,
+        ) as render_pdf, patch(
+            "api.app.services.export_service._pdf_page_count",
+            side_effect=lambda path: 2 if path == returned_pdf else None,
+        ) as page_count, patch(
+            "api.app.services.export_service.validate_pdf_text",
+            return_value=validation,
+        ) as validate_text:
+            export = export_run(response.run_id)
+
+        expected_html = str(Path(settings.docs_dir, "Selekoglu_CV_Tailored_CoreCo.html"))
+        requested_pdf = str(Path(settings.docs_dir, "Selekoglu_CV_Tailored_CoreCo.pdf"))
+        self.assertEqual(export.cv_path, returned_pdf)
+        self.assertEqual(export.pdf_path, returned_pdf)
+        self.assertEqual(export.docx_path, docx_path)
+        self.assertEqual(export.html_path, expected_html)
+        self.assertEqual(export.page_count, 2)
+        self.assertTrue(export.layout_passed)
+        self.assertTrue(export.ats_parse_passed)
+        self.assertEqual(export.ats_parse_notes, validation.notes)
+        render_pdf.assert_called_once()
+        validate_text.assert_called_once()
+
+        layout = render_pdf.call_args.args[0]
+        self.assertEqual(layout.owner_name, "Ata Selekoglu")
+        self.assertEqual(layout.target_role, "Software Developer")
+        self.assertEqual(layout.company_name, "CoreCo")
+        self.assertIn("python", layout.expected_keywords)
+        self.assertEqual(render_pdf.call_args.args[1], expected_html)
+        self.assertEqual(render_pdf.call_args.args[2], requested_pdf)
+        page_count.assert_any_call(returned_pdf)
+        validate_text.assert_called_once_with(returned_pdf, layout)
+
+        persisted = get_run_record(response.run_id)
+        layout_validation = persisted["result"]["layout_validation"]
+        self.assertEqual(layout_validation["validation_method"], "html_pdf_page_count_and_ats_text")
+        self.assertEqual(layout_validation["page_count"], 2)
+        self.assertTrue(layout_validation["layout_passed"])
+        self.assertTrue(any("within max_pages 2" in note for note in layout_validation["notes"]))
+        self.assertTrue(any("PDF text extraction passed ATS readability checks." in note for note in layout_validation["notes"]))
+
+        artifacts = {artifact["artifact_id"]: artifact for artifact in persisted["result"]["artifacts"]}
+        cv_pdf = artifacts[f"{response.run_id}:cv"]
+        self.assertEqual(cv_pdf["kind"], "cv_pdf")
+        self.assertEqual(cv_pdf["path"], returned_pdf)
+        self.assertEqual(cv_pdf["html_path"], expected_html)
+        self.assertEqual(cv_pdf["page_count"], 2)
+        self.assertTrue(cv_pdf["layout_passed"])
+        self.assertTrue(cv_pdf["ats_parse_passed"])
+        self.assertEqual(cv_pdf["ats_parse_notes"], validation.notes)
+        cv_docx = artifacts[f"{response.run_id}:cv_docx"]
+        self.assertEqual(cv_docx["kind"], "cv_docx")
+        self.assertEqual(cv_docx["path"], docx_path)
+        self.assertIsNone(cv_docx["layout_passed"])
+        self.assertIn(f"{response.run_id}:cv", export.artifact_ids)
+        self.assertIn(f"{response.run_id}:cv_docx", export.artifact_ids)
+
+    def test_export_records_html_pdf_page_count_failure(self) -> None:
+        with patch("api.app.services.tailoring_service.run_tailoring", side_effect=self._fake_workflow_result):
+            response = run_tailoring_job(
+                TailorRunRequest(
+                    job_id=self.job_id,
+                    master_id=self.master_id,
+                    options=TailorRunOptions(include_cover_letter=False, max_pages=2),
+                )
+            )
+
+        pdf_path = str(Path(settings.docs_dir, "Selekoglu_CV_Tailored_CoreCo.pdf"))
+        cover_path = str(Path(settings.docs_dir, "Ata_CL_Tailored_CoreCo.pdf"))
+        Path(cover_path).write_bytes(b"%PDF-1.4 placeholder")
+        artifact_data = {
+            "cv_path": str(Path(settings.docs_dir, "Ata_CV_Tailored_CoreCo.docx")),
             "cl_path": cover_path,
             "docs_url": None,
             "cv_bytes": b"",
@@ -317,24 +406,30 @@ class TailoringServiceSprint3Test(unittest.TestCase):
             "cover_letter_text": "Draft cover letter.",
         }
         with patch("api.app.services.export_service.render_run_artifacts", return_value=artifact_data), patch(
+            "api.app.services.export_service.render_resume_pdf",
+            return_value=pdf_path,
+        ), patch(
             "api.app.services.export_service._pdf_page_count",
             side_effect=lambda path: 3 if path == pdf_path else 1,
+        ), patch(
+            "api.app.services.export_service.validate_pdf_text",
+            return_value=PdfTextValidation(ats_parse_passed=True, extracted_text="", notes=["ATS passed."]),
         ):
             export = export_run(response.run_id)
 
         self.assertEqual(export.pdf_path, pdf_path)
-        self.assertIsNone(export.docx_path)
         self.assertEqual(export.page_count, 3)
         self.assertFalse(export.layout_passed)
+        self.assertTrue(export.ats_parse_passed)
 
         persisted = get_run_record(response.run_id)
         layout = persisted["result"]["layout_validation"]
-        self.assertEqual(layout["validation_method"], "pdf_page_count")
+        self.assertEqual(layout["validation_method"], "html_pdf_page_count_and_ats_text")
         self.assertEqual(layout["page_count"], 3)
         self.assertFalse(layout["layout_passed"])
         self.assertTrue(any("exceeds max_pages 2" in note for note in layout["notes"]))
 
-    def test_export_docx_draft_is_explicitly_not_pdf_validated(self) -> None:
+    def test_export_records_ats_text_failure(self) -> None:
         with patch("api.app.services.tailoring_service.run_tailoring", side_effect=self._fake_workflow_result):
             response = run_tailoring_job(
                 TailorRunRequest(
@@ -357,20 +452,32 @@ class TailoringServiceSprint3Test(unittest.TestCase):
             "cover_letter_text": "Draft cover letter.",
         }
         with patch("api.app.services.export_service.render_run_artifacts", return_value=artifact_data), patch(
+            "api.app.services.export_service.render_resume_pdf",
+            return_value=str(Path(settings.docs_dir, "Selekoglu_CV_Tailored_CoreCo.pdf")),
+        ), patch(
             "api.app.services.export_service._pdf_page_count",
-            return_value=None,
+            return_value=2,
+        ), patch(
+            "api.app.services.export_service.validate_pdf_text",
+            return_value=PdfTextValidation(
+                ats_parse_passed=False,
+                extracted_text="",
+                notes=["Missing keywords: python", "Section reading order did not match layout order."],
+            ),
         ):
             export = export_run(response.run_id)
 
         self.assertEqual(export.docx_path, docx_path)
-        self.assertIsNone(export.pdf_path)
-        self.assertIsNone(export.page_count)
-        self.assertIsNone(export.layout_passed)
+        self.assertEqual(export.pdf_path, str(Path(settings.docs_dir, "Selekoglu_CV_Tailored_CoreCo.pdf")))
+        self.assertEqual(export.page_count, 2)
+        self.assertFalse(export.layout_passed)
+        self.assertFalse(export.ats_parse_passed)
+        self.assertIn("Missing keywords: python", export.ats_parse_notes)
         persisted = get_run_record(response.run_id)
         layout = persisted["result"]["layout_validation"]
-        self.assertEqual(layout["validation_method"], "docx_draft_no_pdf_validation")
-        self.assertIsNone(layout["layout_passed"])
-        self.assertTrue(any("PDF page-count validation was not run" in note for note in layout["notes"]))
+        self.assertEqual(layout["validation_method"], "html_pdf_page_count_and_ats_text")
+        self.assertFalse(layout["layout_passed"])
+        self.assertTrue(any("Missing keywords: python" in note for note in layout["notes"]))
 
 
 if __name__ == "__main__":

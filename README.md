@@ -7,6 +7,8 @@ ApplAI helps you run a repeatable JD-to-application flow: import a master CV onc
 - **Suggestions-first tailoring**: review original vs suggested bullet edits before generating outputs.
 - **Import Master CV**: upload DOCX/PDF, auto-detect sections, manually review/edit, and persist your canonical master.
 - **Template-aware rendering**: stores section anchors in per-master config files so output is not tied to hardcoded headers.
+- **HTML-first rendering**: final CV PDFs are generated from controlled HTML/CSS resume components, with DOCX kept as an editable compatibility output.
+- **ATS render validation**: generated PDFs are checked for page count and extractable text before approval.
 - **Quick and deep modes**: quick mode minimizes LLM-heavy steps; deep mode runs full rewriting and QA flow.
 - **Configurable rewriting**: optional safe rewrites for experience and education with factual checks.
 - **Optional modules**: independently toggle cover letter generation and ATS/QA analysis.
@@ -19,7 +21,8 @@ ApplAI helps you run a repeatable JD-to-application flow: import a master CV onc
 - **React + TypeScript (Vite)** for the new web editing/tailoring workspace.
 - **Google Gemini API** for structured extraction and rewrite suggestions.
 - **Pydantic** for strict pipeline contracts.
-- **python-docx, pdfplumber, ReportLab** for CV import and document output.
+- **python-docx, pdfplumber, ReportLab** for CV import and compatibility document output.
+- **Playwright/browser PDF rendering** for HTML-first final CV exports.
 
 ## Getting Started
 

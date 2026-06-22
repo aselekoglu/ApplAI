@@ -501,25 +501,41 @@ This keeps the master CV as one source, but not the whole brain. Projects, achie
 
 Recommended v1:
 
-1. Keep DOCX import and editable DOCX export.
-2. Add an internal resume layout model:
+1. Keep DOCX/PDF import operational for master CV ingestion.
+2. Keep DOCX export as an editable compatibility output, but stop treating the DOCX bridge as the primary final-render path.
+3. Add an internal resume layout model:
    - sections,
    - selected blocks,
    - target bullet counts,
    - estimated character budget,
-   - priority/compression policy.
-3. Render a PDF preview using a controlled HTML/CSS template or the current DOCX bridge.
-4. Count PDF pages after render.
-5. If the render exceeds two pages, rerun deterministic compression:
+   - priority/compression policy,
+   - provenance and unsupported-claim metadata.
+4. Render final CV previews and PDFs from controlled HTML/CSS resume components.
+5. Generate PDF from HTML with a browser print engine, using real text nodes instead of screenshots, canvas, or image-only rendering.
+6. Count PDF pages after render.
+7. Run an ATS parse gate by extracting text from the generated PDF and confirming:
+   - expected section headings are present,
+   - selected bullet text is extractable,
+   - key job keywords survive the render,
+   - text order follows the resume layout order.
+8. If the render exceeds two pages or ATS parsing fails, rerun deterministic compression:
    - remove low-priority/low-relevance bullets,
    - shorten verbose bullets,
    - reduce project detail,
    - compress skills,
    - adjust spacing only after content reduction.
-6. Save final selected/removed/shortened decisions in the change log.
-7. Return page count and layout status to Eve so the workflow can branch deterministically.
+9. Save final selected/removed/shortened decisions in the change log.
+10. Return page count, visual layout status, ATS parse status, and artifact paths to Eve so the workflow can branch deterministically.
 
 Do not use formatting tricks as the main solution. The reliable solution is content budgeting before render plus page validation after render.
+
+HTML-first rendering rules:
+
+- The structured tailoring payload remains the source of truth; HTML is a deterministic render target, not career data storage.
+- Use simple, ATS-readable document flow: contact header, profile, skills, experience, projects, education, and optional additional sections.
+- Avoid image-only output, canvas screenshots, text in icons, absolute-position-heavy layouts, negative letter spacing, and complex table grids.
+- Prefer one-column or conservative two-column layouts only when PDF text extraction proves stable.
+- Keep Eve as a thin adapter over Core API render endpoints; do not move render or career-domain logic into Eve prompts.
 
 Rendering research sources:
 
@@ -670,6 +686,8 @@ Sprint 3 - CV Tailoring Engine:
 - Select evidence before rewriting.
 - Add provenance to every suggested edit.
 - Add strict two-page validation and compression loop.
+- Replace the final CV render path with HTML/CSS resume components that generate ATS-readable PDFs.
+- Validate generated PDFs with both page-count checks and text-extraction checks.
 - Expose tailoring through Eve `tailor_cv` and `render_cv` tools.
 - Add edit/approval screen and diff from master.
 

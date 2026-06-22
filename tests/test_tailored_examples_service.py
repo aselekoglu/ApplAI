@@ -13,11 +13,17 @@ from api.app.services.tailored_examples_service import (
 class TailoredExamplesServiceTest(unittest.TestCase):
     def test_discovers_all_local_tailored_pdfs(self) -> None:
         pdfs = discover_tailored_example_pdfs()
+        if not pdfs:
+            self.skipTest("Private tailored example PDFs are not present in docs/tailored_examples/.")
 
         self.assertEqual(len(pdfs), 20)
         self.assertTrue(all(path.suffix.lower() == ".pdf" for path in pdfs))
 
     def test_each_tailored_pdf_is_two_pages_with_parse_metadata(self) -> None:
+        pdfs = discover_tailored_example_pdfs()
+        if not pdfs:
+            self.skipTest("Private tailored example PDFs are not present in docs/tailored_examples/.")
+
         examples = list_tailored_examples()
 
         self.assertEqual(len(examples), 20)

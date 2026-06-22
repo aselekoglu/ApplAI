@@ -160,8 +160,11 @@ class ArtifactMetadata(BaseModel):
     artifact_id: str
     kind: str
     path: str
+    html_path: Optional[str] = None
     page_count: Optional[int] = None
     layout_passed: Optional[bool] = None
+    ats_parse_passed: Optional[bool] = None
+    ats_parse_notes: List[str] = Field(default_factory=list)
 
 
 class TailoringResultPayload(BaseModel):
@@ -225,6 +228,9 @@ class ExportResponse(BaseModel):
     docs_url: Optional[str] = None
     docx_path: Optional[str] = None
     pdf_path: Optional[str] = None
+    html_path: Optional[str] = None
     page_count: Optional[int] = None
     layout_passed: Optional[bool] = None
+    ats_parse_passed: Optional[bool] = None
+    ats_parse_notes: List[str] = Field(default_factory=list)
     artifact_ids: List[str] = Field(default_factory=list)

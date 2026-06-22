@@ -1,0 +1,93 @@
+@page {
+  size: letter;
+  margin: 0.55in 0.62in;
+}
+
+:root {
+  color: #1f2933;
+  background: #ffffff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.32;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #ffffff;
+  color: #1f2933;
+}
+
+.resume-document {
+  max-width: 7.35in;
+  margin: 0 auto;
+}
+
+.resume-header {
+  border-bottom: 1px solid #44546a;
+  margin-bottom: 0.16in;
+  padding-bottom: 0.08in;
+}
+
+.resume-header h1 {
+  color: #111827;
+  font-size: 20pt;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.resume-meta {
+  color: #44546a;
+  font-size: 10.5pt;
+  margin: 0.04in 0 0;
+}
+
+.resume-section {
+  break-inside: avoid;
+  margin: 0 0 0.13in;
+}
+
+.resume-section h2 {
+  border-bottom: 0.5px solid #a0aec0;
+  color: #111827;
+  font-size: 10.5pt;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+  margin: 0 0 0.045in;
+  padding-bottom: 0.025in;
+  text-transform: uppercase;
+}
+
+.section-list,
+.skills-list {
+  margin: 0;
+  padding-left: 0.18in;
+}
+
+.section-list li,
+.skills-list li {
+  margin: 0 0 0.035in;
+  padding-left: 0.02in;
+}
+
+@media screen {
+  body {
+    padding: 0.35in 0.2in;
+  }
+}
+
+@media print {
+  body {
+    padding: 0;
+  }
+
+  .resume-document {
+    max-width: none;
+  }
+}

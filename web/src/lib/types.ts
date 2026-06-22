@@ -116,7 +116,41 @@ export interface TailoringResultPayload {
     added_by_tailoring: string[];
     coverage_pct: number;
   };
+  page_budget?: Record<string, unknown>;
+  layout_validation?: {
+    max_pages?: number;
+    page_count?: number | null;
+    layout_passed?: boolean | null;
+    validation_method?: string;
+    notes?: string[];
+  };
+  artifacts?: ExportArtifactMetadata[];
   cover_letter: string;
+}
+
+export interface ExportArtifactMetadata {
+  artifact_id: string;
+  kind?: string;
+  path?: string;
+  page_count?: number | null;
+  layout_passed?: boolean | null;
+  html_path?: string | null;
+  ats_parse_passed?: boolean | null;
+  ats_parse_notes?: string[];
+}
+
+export interface ExportMetadata {
+  cv_path: string;
+  cover_letter_path: string;
+  docx_path?: string | null;
+  pdf_path?: string | null;
+  html_path?: string | null;
+  page_count?: number | null;
+  layout_passed?: boolean | null;
+  ats_parse_passed?: boolean | null;
+  ats_parse_notes?: string[];
+  artifact_ids?: string[];
+  docs_url?: string | null;
 }
 
 export interface TailorRunResponse {
@@ -142,16 +176,9 @@ export interface RunDetailResponse {
   created_at: string;
   options: TailorRunOptions;
   result: TailoringResultPayload;
-  exports?: {
-    cv_path: string;
-    cover_letter_path: string;
-    docs_url?: string | null;
-  } | null;
+  exports?: ExportMetadata | null;
 }
 
-export interface ExportResponse {
+export interface ExportResponse extends ExportMetadata {
   run_id: string;
-  cv_path: string;
-  cover_letter_path: string;
-  docs_url?: string | null;
 }

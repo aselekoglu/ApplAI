@@ -38,6 +38,8 @@ def root() -> Dict[str, str]:
     return {"name": "ApplAI API", "docs": "/docs"}
 
 
+from fastapi.staticfiles import StaticFiles
+
 # Health router exposes GET /health (see api.app.routes.health).
 app.include_router(health_router)
 app.include_router(masters_router)
@@ -45,3 +47,5 @@ app.include_router(tailoring_router)
 app.include_router(jobs_router)
 app.include_router(career_brain_router)
 app.include_router(tailored_examples_router)
+
+app.mount("/static-docs", StaticFiles(directory="docs"), name="static-docs")
