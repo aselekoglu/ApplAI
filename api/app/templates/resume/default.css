@@ -1,14 +1,14 @@
 @page {
   size: letter;
-  margin: 0.55in 0.62in;
+  margin: 0.42in 0.52in;
 }
 
 :root {
-  color: #1f2933;
+  color: #111111;
   background: #ffffff;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 10.5pt;
-  line-height: 1.32;
+  font-size: 9.35pt;
+  line-height: 1.22;
 }
 
 * {
@@ -18,62 +18,85 @@
 body {
   margin: 0;
   background: #ffffff;
-  color: #1f2933;
+  color: #111111;
 }
 
 .resume-document {
-  max-width: 7.35in;
+  max-width: 7.55in;
   margin: 0 auto;
 }
 
 .resume-header {
-  border-bottom: 1px solid #44546a;
-  margin-bottom: 0.16in;
-  padding-bottom: 0.08in;
+  margin-bottom: 0.08in;
+  text-align: center;
 }
 
 .resume-header h1 {
-  color: #111827;
-  font-size: 20pt;
+  color: #000000;
+  font-size: 18pt;
   font-weight: 700;
   letter-spacing: 0;
-  line-height: 1.1;
+  line-height: 1.05;
   margin: 0;
 }
 
+.resume-contact,
 .resume-meta {
-  color: #44546a;
-  font-size: 10.5pt;
-  margin: 0.04in 0 0;
+  color: #111111;
+  font-size: 9.2pt;
+  margin: 0.015in 0 0;
 }
 
 .resume-section {
-  break-inside: avoid;
-  margin: 0 0 0.13in;
+  margin: 0 0 0.075in;
 }
 
 .resume-section h2 {
-  border-bottom: 0.5px solid #a0aec0;
-  color: #111827;
-  font-size: 10.5pt;
+  border-bottom: 1px solid #111111;
+  color: #111111;
+  font-size: 10pt;
   font-weight: 700;
   letter-spacing: 0;
-  line-height: 1.2;
-  margin: 0 0 0.045in;
-  padding-bottom: 0.025in;
+  line-height: 1.15;
+  margin: 0 0 0.035in;
+  padding-bottom: 0.012in;
   text-transform: uppercase;
+}
+
+.resume-entry {
+  break-inside: avoid;
+  margin: 0 0 0.055in;
+}
+
+.entry-title {
+  align-items: baseline;
+  display: flex;
+  font-size: 9.45pt;
+  gap: 0.08in;
+  justify-content: space-between;
+  line-height: 1.15;
+}
+
+.entry-date {
+  flex: 0 0 auto;
+  font-weight: 400;
+}
+
+.entry-meta {
+  font-size: 9.15pt;
+  margin-top: 0.01in;
 }
 
 .section-list,
 .skills-list {
-  margin: 0;
-  padding-left: 0.18in;
+  margin: 0.025in 0 0;
+  padding-left: 0.23in;
 }
 
 .section-list li,
 .skills-list li {
-  margin: 0 0 0.035in;
-  padding-left: 0.02in;
+  margin: 0 0 0.018in;
+  padding-left: 0.015in;
 }
 
 @media screen {

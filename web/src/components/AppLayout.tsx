@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from "react-router-dom";
 import type { PropsWithChildren } from "react";
+import { AiTaskQueuePanel } from "../features/ai-tasks/AiTaskQueuePanel";
 
 export function AppLayout({ children }: PropsWithChildren) {
   const { pathname } = useLocation();
@@ -17,7 +18,10 @@ export function AppLayout({ children }: PropsWithChildren) {
           <NavLink to="/runs">Runs</NavLink>
         </nav>
       </header>
-      <main className="page">{children}</main>
+      <main className="page">
+        <AiTaskQueuePanel />
+        {children}
+      </main>
     </div>
   );
 }

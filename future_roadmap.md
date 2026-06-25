@@ -1,6 +1,6 @@
 # ApplAI Future Roadmap
 
-Last updated: 2026-06-18
+Last updated: 2026-06-25
 
 This roadmap tracks the build sequence after the Eve-first architecture decision.
 
@@ -133,6 +133,22 @@ Core work:
 Exit criteria:
 
 - Generated CV has an HTML-rendered PDF output, optional editable DOCX compatibility output, page count <= 2, ATS-readable extracted text, provenance, ATS report, QA report, and approval status.
+
+### Phase 3.2 - Durable AI Task Queue
+
+Status: partially implemented; detailed handoff is in `docs/ai-task-queue-handoff.md`.
+
+Implemented:
+
+- Local durable AI task persistence and worker execution.
+- Gemini Interactions wrapper with private-by-default storage disabled.
+- Queue API, React queue context, and Arpa-inspired Q panel.
+- Queue-backed tailoring, render/export, and rerun actions.
+
+Remaining:
+
+- Runs route-state restoration for completed queue tasks.
+- Final independent review and full verification.
 
 ## Phase 4 - Cover Letter And Application Packet
 

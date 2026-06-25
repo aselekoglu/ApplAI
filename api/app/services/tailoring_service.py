@@ -21,6 +21,7 @@ from api.app.schemas.tailoring import (
     RunSummary,
     SelectedEvidenceBlock,
     Selection,
+    TailorRunOptions,
     TailorRunRequest,
     TailorRunResponse,
     TailoringResultPayload,
@@ -277,7 +278,7 @@ def _selection_text(selection: Any) -> str:
     return selection.new_text or selection.original_text or ""
 
 
-def _shorten_text(text: str, max_words: int = 16) -> str:
+def _legacy_shorten_text(text: str, max_words: int = 16) -> str:
     words = text.split()
     if len(words) <= max_words:
         return text
@@ -340,10 +341,84 @@ def _compression_entry(decision: CompressionDecision) -> Any:
     )
 
 
-def _apply_deterministic_compression(result, max_pages: int) -> List[CompressionDecision]:
-    if max_pages > 2:
-        return []
+OPEN_CLAUSE_ENDINGS = (
+    "such",
+    "such as",
+    "including",
+    "with",
+    "and",
+    "or",
+    "to",
+    "for",
+    "using",
+    "between",
+    "across",
+    "strong",
+    "test",
+)
 
+
+def _has_open_clause_ending(text: str) -> bool:
+    normalized = text.strip().rstrip(".;,").lower()
+    return any(
+        normalized == ending or normalized.endswith(f" {ending}")
+        for ending in OPEN_CLAUSE_ENDINGS
+    )
+
+
+def should_apply_pre_render_compression(
+    *,
+    max_pages: int,
+    selected_bullet_count: int,
+    selected_word_count: int,
+) -> bool:
+    if max_pages > 2:
+        return False
+    return selected_bullet_count > 22 or selected_word_count > 900
+
+
+def _shorten_text(text: str, max_words: int = 24) -> str:
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+
+    candidates: list[str] = []
+
+    for separator in [". ", "; "]:
+        parts = text.split(separator)
+        candidate = ""
+        for index, part in enumerate(parts):
+            next_candidate = (candidate + " " + part.strip()).strip()
+            if separator == "; " and index < len(parts) - 1:
+                next_candidate = next_candidate.rstrip(";") + ";"
+            elif separator == ". " and index < len(parts) - 1:
+                next_candidate = next_candidate.rstrip(".") + "."
+            if len(next_candidate.split()) <= max_words:
+                candidate = next_candidate
+        if candidate:
+            candidates.append(candidate)
+
+    comma_candidate = ""
+    for part in text.split(","):
+        next_candidate = (comma_candidate + ", " + part.strip()).strip(", ")
+        if len(next_candidate.split()) <= max_words:
+            comma_candidate = next_candidate
+    if comma_candidate:
+        candidates.append(comma_candidate.rstrip(",") + ".")
+
+    candidates.append(" ".join(words[:max_words]).rstrip(".,;:-") + ".")
+
+    for candidate in candidates:
+        candidate = candidate.strip()
+        if not candidate.endswith((".", "!", "?")):
+            candidate += "."
+        if not _has_open_clause_ending(candidate):
+            return candidate
+
+    return text
+
+
+def _apply_deterministic_compression(result, max_pages: int) -> List[CompressionDecision]:
     decisions: List[CompressionDecision] = []
     tailored = result.tailored_output
 
@@ -354,6 +429,14 @@ def _apply_deterministic_compression(result, max_pages: int) -> List[Compression
         tailored.education_selections,
     ]
     active_selections = [selection for group in active_groups for selection in group if selection.action != "deselect"]
+    selected_word_count = sum(len(_selection_text(selection).split()) for selection in active_selections)
+    if not should_apply_pre_render_compression(
+        max_pages=max_pages,
+        selected_bullet_count=len(active_selections),
+        selected_word_count=selected_word_count,
+    ):
+        return []
+
     bullet_limit = 16
 
     low_priority = sorted(
@@ -520,6 +603,70 @@ def _pre_render_layout_validation(page_budget: PageBudgetMetadata) -> LayoutVali
     )
 
 
+def _normalize_quality_heading(value: str) -> str:
+    return " ".join(value.strip().split()).upper().rstrip(":").strip()
+
+
+def evaluate_output_quality(
+    *,
+    max_pages: int,
+    page_count: int | None,
+    extracted_word_count: int,
+    section_headings: list[str],
+    keyword_coverage_pct: float,
+    missing_required_sections: list[str],
+    broken_bullets: list[str],
+) -> LayoutValidation:
+    headings = {_normalize_quality_heading(heading) for heading in section_headings}
+    if "RELEVANT EXPERIENCE" in headings:
+        headings.add("EXPERIENCE")
+    notes: list[str] = []
+    passed = True
+
+    if page_count is None:
+        passed = False
+        notes.append("PDF page count was unavailable.")
+    elif page_count > max_pages:
+        passed = False
+        notes.append(f"PDF page count {page_count} exceeds max_pages {max_pages}.")
+
+    if max_pages >= 2 and page_count == 1 and extracted_word_count < 550:
+        passed = False
+        notes.append(
+            f"Rendered CV is underfilled for a two-page target: {extracted_word_count} extracted words on 1 page."
+        )
+
+    required = {"PROFILE", "SUMMARY OF QUALIFICATIONS", "EXPERIENCE", "PROJECTS", "EDUCATION"}
+    missing = sorted(required - headings)
+    provided_missing = [
+        _normalize_quality_heading(section)
+        for section in missing_required_sections
+    ]
+    missing.extend(section for section in provided_missing if section and section not in headings and section not in missing)
+    if missing:
+        passed = False
+        notes.append(f"Missing required sections: {', '.join(missing)}")
+
+    if keyword_coverage_pct < 30:
+        passed = False
+        notes.append(f"Keyword coverage {keyword_coverage_pct:.1f}% is below minimum 30.0%.")
+
+    if broken_bullets:
+        passed = False
+        notes.append(f"Broken bullets: {len(broken_bullets)}")
+
+    if passed:
+        notes.append("HTML PDF quality gate passed.")
+
+    return LayoutValidation(
+        max_pages=max_pages,
+        page_count=page_count,
+        layout_passed=passed,
+        validation_method="html_pdf_quality_gate",
+        notes=notes,
+    )
+
+
 def run_tailoring_job(payload: TailorRunRequest) -> TailorRunResponse:
     ensure_runs_dir()
     master = get_master(payload.master_id)
@@ -632,6 +779,64 @@ def get_run(run_id: str) -> RunDetailResponse:
         raise FileNotFoundError(f"Run '{run_id}' was not found")
     record = json.loads(path.read_text(encoding="utf-8"))
     return _to_response(record)
+
+
+def rerun_tailoring_job(run_id: str) -> TailorRunResponse:
+    record = get_run_record(run_id)
+    workflow_inputs = record.get("workflow_inputs", {})
+    options_payload = dict(record.get("options") or {})
+    if workflow_inputs:
+        options_payload.update(
+            {
+                "company_name": workflow_inputs.get("company_name", options_payload.get("company_name", "")),
+                "job_title": workflow_inputs.get("job_title", options_payload.get("job_title", "")),
+                "model_name": workflow_inputs.get("selected_model", options_payload.get("model_name", settings.default_model)),
+                "quick_mode": workflow_inputs.get("quick_mode", options_payload.get("quick_mode", False)),
+                "include_cover_letter": workflow_inputs.get(
+                    "include_cover_letter",
+                    options_payload.get("include_cover_letter", True),
+                ),
+                "include_ats": workflow_inputs.get("include_ats", options_payload.get("include_ats", True)),
+                "include_qa": workflow_inputs.get("include_qa", options_payload.get("include_qa", True)),
+                "allow_experience_rewrites": workflow_inputs.get(
+                    "allow_experience_rewrites",
+                    options_payload.get("allow_experience_rewrites", False),
+                ),
+                "allow_education_rewrites": workflow_inputs.get(
+                    "allow_education_rewrites",
+                    options_payload.get("allow_education_rewrites", False),
+                ),
+                "max_pages": workflow_inputs.get("max_pages", options_payload.get("max_pages", 2)),
+            }
+        )
+
+    job_id = record.get("job_id") or workflow_inputs.get("job_id") or None
+    job_description = record.get("job_description") or workflow_inputs.get("job_desc")
+    if job_id:
+        try:
+            load_job_record(job_id)
+        except ValueError:
+            job_id = None
+    if job_id:
+        job_description = None
+    payload = TailorRunRequest(
+        master_id=record.get("master_id", ""),
+        job_id=job_id,
+        job_description=job_description,
+        options=TailorRunOptions.model_validate(options_payload),
+    )
+    response = run_tailoring_job(payload)
+    update_run_record(
+        response.run_id,
+        {
+            "rerun_of": run_id,
+            "workflow_inputs": {
+                **get_run_record(response.run_id).get("workflow_inputs", {}),
+                "rerun_of": run_id,
+            },
+        },
+    )
+    return response
 
 
 def update_run_exports(run_id: str, exports: Dict[str, Any]) -> None:

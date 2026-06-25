@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from api.app.schemas.tailoring import ExportRequest, ExportResponse, RunDetailResponse, RunSummary, TailorRunRequest, TailorRunResponse
 from api.app.services.export_service import export_run
-from api.app.services.tailoring_service import get_run, list_runs, run_tailoring_job
+from api.app.services.tailoring_service import get_run, list_runs, rerun_tailoring_job, run_tailoring_job
 
 router = APIRouter(prefix="/tailor", tags=["tailoring"])
 
@@ -44,3 +44,15 @@ def run_detail(run_id: str) -> RunDetailResponse:
         return get_run(run_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/runs/{run_id}/rerun", response_model=TailorRunResponse)
+def rerun(run_id: str) -> TailorRunResponse:
+    try:
+        return rerun_tailoring_job(run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Rerun failed: {exc}") from exc

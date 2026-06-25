@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAiTaskSubmit } from "../features/ai-tasks/useAiTaskSubmit";
 import { apiClient, API_BASE_URL } from "../lib/api-client";
 import type { ExportMetadata, RunDetailResponse, RunSummary } from "../lib/types";
 
@@ -97,8 +98,10 @@ export function RunsPage() {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [selected, setSelected] = useState<RunDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "cv" | "cl" | "changelog">("overview");
+  const { queueRender, queueRerun } = useAiTaskSubmit();
 
   async function refresh() {
     const data = await apiClient.listRuns();
@@ -116,6 +119,7 @@ export function RunsPage() {
   async function selectRun(runId: string) {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       setSelected(await apiClient.getRun(runId));
     } catch (err) {
@@ -129,9 +133,39 @@ export function RunsPage() {
     if (!selected) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      await apiClient.exportRun(selected.run_id);
-      setSelected(await apiClient.getRun(selected.run_id));
+      const relatedLabel =
+        [selected.options.company_name, selected.options.job_title].filter(Boolean).join(" - ") ||
+        selected.run_id;
+      const { task, created } = await queueRender(selected.run_id, relatedLabel);
+      setNotice(
+        created
+          ? `Queued ${task.title}. Open Q for progress.`
+          : `${task.title} is already active in Q.`
+      );
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rerunSelected() {
+    if (!selected) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const relatedLabel =
+        [selected.options.company_name, selected.options.job_title].filter(Boolean).join(" - ") ||
+        selected.run_id;
+      const { task, created } = await queueRerun(selected.run_id, relatedLabel);
+      setNotice(
+        created
+          ? `Queued ${task.title}. Open Q for progress.`
+          : `${task.title} is already active in Q.`
+      );
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -182,6 +216,12 @@ export function RunsPage() {
     );
   };
 
+  const layoutValidation = selected?.result.layout_validation;
+  const layoutNotes = layoutValidation?.notes ?? [];
+  const layoutPassed = selected?.exports?.layout_passed ?? layoutValidation?.layout_passed;
+  const pageCount = selected?.exports?.page_count ?? layoutValidation?.page_count;
+  const maxPages = layoutValidation?.max_pages ?? selected?.options.max_pages;
+
   const overviewTab = selected && (
     <div className="stack" style={{ gap: "1rem" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
@@ -197,8 +237,8 @@ export function RunsPage() {
         <div className="card" style={{ padding: "0.8rem", background: "#181e28" }}>
           <strong>Render Status</strong>
           <div style={{ margin: "0.5rem 0", display: "flex", flexDirection: "column", gap: "0.25rem", fontSize: "0.85rem" }}>
-            <div>Visual Layout: <span style={{ color: selected.exports?.layout_passed ? "#a5d6a7" : "#ff9f9f" }}>
-              {selected.exports?.layout_passed ? "Passed" : "Failed / Unchecked"}
+            <div>Visual Layout: <span style={{ color: layoutPassed ? "#a5d6a7" : "#ff9f9f" }}>
+              {layoutPassed ? "Passed" : "Failed / Unchecked"}
             </span></div>
             <div>ATS Readability: <span style={{ color: selected.exports?.ats_parse_passed ? "#a5d6a7" : "#ff9f9f" }}>
               {selected.exports?.ats_parse_passed ? "Passed" : "Failed / Unchecked"}
@@ -206,6 +246,40 @@ export function RunsPage() {
           </div>
         </div>
       </div>
+
+      {layoutValidation ? (
+        <div className="card" style={{ padding: "0.8rem", background: "#151a22", borderColor: layoutPassed ? "#2e7d32" : "#8a3333" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+            <strong>Output Quality Gate</strong>
+            <span style={{ color: layoutPassed ? "#a5d6a7" : "#ff9f9f", fontWeight: "bold", fontSize: "0.85rem" }}>
+              {layoutPassed ? "Passed" : "Failed"}
+            </span>
+          </div>
+          <div style={{ marginTop: "0.5rem", display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.6rem", fontSize: "0.82rem" }}>
+            <div>
+              <span className="muted" style={{ display: "block" }}>Method</span>
+              <code>{layoutValidation.validation_method || "unknown"}</code>
+            </div>
+            <div>
+              <span className="muted" style={{ display: "block" }}>PDF Pages</span>
+              <strong>{pageCount ?? "not available"}</strong>{maxPages ? ` / ${maxPages}` : null}
+            </div>
+            <div>
+              <span className="muted" style={{ display: "block" }}>Approval Boundary</span>
+              <strong>{selected.result.approval_status || "draft"}</strong>
+            </div>
+          </div>
+          {layoutNotes.length ? (
+            <ul className="simpleList" style={{ marginTop: "0.7rem", fontSize: "0.84rem", color: layoutPassed ? "#adc2db" : "#ffb3b3" }}>
+              {layoutNotes.map((note, index) => (
+                <li key={`${index}-${note}`}>{note}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted" style={{ margin: "0.7rem 0 0 0", fontSize: "0.84rem" }}>No quality notes recorded.</p>
+          )}
+        </div>
+      ) : null}
 
       {selected.result.qa_report.feedback && (
         <div className="card" style={{ padding: "0.8rem", background: "#151a22" }}>
@@ -382,6 +456,7 @@ export function RunsPage() {
     <section className="stack">
       <h2>Run history</h2>
       {error ? <p className="error">{error}</p> : null}
+      {notice ? <p className="muted">{notice}</p> : null}
       <div className="grid2">
         <div className="card">
           <h3>Runs</h3>
@@ -405,6 +480,14 @@ export function RunsPage() {
                 <p style={{ margin: "0.2rem 0" }}>Run ID: <code style={{ fontSize: "0.8rem" }}>{selected.run_id}</code></p>
                 <p style={{ margin: "0.2rem 0" }}>Master: <strong>{selected.master_id}</strong></p>
                 <p style={{ margin: "0.2rem 0" }}>Model: <code>{selected.options.model_name}</code></p>
+                <div style={{ marginTop: "0.7rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <button className="btnPrimary" disabled={busy} onClick={rerunSelected}>
+                    Queue rerun
+                  </button>
+                  <span className="muted" style={{ fontSize: "0.8rem", alignSelf: "center" }}>
+                    Creates a new draft run from this run's saved master, job, and options.
+                  </span>
+                </div>
               </div>
 
               {selected.exports ? (
@@ -414,7 +497,7 @@ export function RunsPage() {
               ) : (
                 <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                   <button className="btnPrimary" disabled={busy} onClick={exportRun}>
-                    Export files (PDF / DOCX)
+                    Queue export
                   </button>
                   <span className="muted" style={{ fontSize: "0.8rem" }}>Exports PDF, Word document and cover letter.</span>
                 </div>

@@ -22,6 +22,22 @@ class ResumeSection(BaseModel):
     items: List[ResumeItem] = Field(default_factory=list)
 
 
+class ResumeContact(BaseModel):
+    location: str = ""
+    phone: str = ""
+    email: str = ""
+    links: List[str] = Field(default_factory=list)
+
+
+class ResumeEntry(BaseModel):
+    entry_id: str
+    title: str = ""
+    organization: str = ""
+    location: str = ""
+    date_range: str = ""
+    items: List[ResumeItem] = Field(default_factory=list)
+
+
 class PdfTextValidation(BaseModel):
     ats_parse_passed: bool
     extracted_text: str = ""
@@ -43,8 +59,12 @@ class HtmlRenderResult(BaseModel):
 
 class ResumeLayout(BaseModel):
     owner_name: str
+    contact: ResumeContact = Field(default_factory=ResumeContact)
     target_role: str = ""
     company_name: str = ""
     max_pages: int = 2
     sections: List[ResumeSection] = Field(default_factory=list)
+    experience_entries: List[ResumeEntry] = Field(default_factory=list)
+    project_entries: List[ResumeEntry] = Field(default_factory=list)
+    education_entries: List[ResumeEntry] = Field(default_factory=list)
     expected_keywords: List[str] = Field(default_factory=list)

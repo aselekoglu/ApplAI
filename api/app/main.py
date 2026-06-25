@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.app.config import settings
+from api.app.routes.ai_tasks import router as ai_tasks_router
 from api.app.routes.career_brain import router as career_brain_router
 from api.app.routes.health import router as health_router
 from api.app.routes.jobs import router as jobs_router
@@ -47,5 +48,6 @@ app.include_router(tailoring_router)
 app.include_router(jobs_router)
 app.include_router(career_brain_router)
 app.include_router(tailored_examples_router)
+app.include_router(ai_tasks_router)
 
 app.mount("/static-docs", StaticFiles(directory="docs"), name="static-docs")

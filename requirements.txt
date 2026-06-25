@@ -9,7 +9,9 @@ pydantic
 eval_type_backport; python_version < "3.9"
 streamlit
 google-generativeai
+google-genai>=2.3.0
 fastapi
+httpx2>=2.4.0
 uvicorn[standard]
 python-multipart
 reportlab

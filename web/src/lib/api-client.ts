@@ -3,6 +3,9 @@
  * when unset, requests use http://127.0.0.1:8000 (must match CORS / running API).
  */
 import type {
+  AiTaskKind,
+  AiTaskListResponse,
+  AiTaskRecord,
   ExportResponse,
   FinalizeMasterRequest,
   ImportMasterResponse,
@@ -87,6 +90,34 @@ export const apiClient = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ run_id: runId }),
+    });
+  },
+  async rerunRun(runId: string): Promise<TailorRunResponse> {
+    return request<TailorRunResponse>(`/tailor/runs/${encodeURIComponent(runId)}/rerun`, {
+      method: "POST",
+    });
+  },
+  async createAiTask(payload: {
+    kind: AiTaskKind;
+    title: string;
+    related_label?: string;
+    input: Record<string, unknown>;
+  }): Promise<AiTaskRecord> {
+    return request<AiTaskRecord>("/ai-tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+  async listAiTasks(): Promise<AiTaskListResponse> {
+    return request<AiTaskListResponse>("/ai-tasks");
+  },
+  async getAiTask(taskId: string): Promise<AiTaskRecord> {
+    return request<AiTaskRecord>(`/ai-tasks/${encodeURIComponent(taskId)}`);
+  },
+  async cancelAiTask(taskId: string): Promise<AiTaskRecord> {
+    return request<AiTaskRecord>(`/ai-tasks/${encodeURIComponent(taskId)}/cancel`, {
+      method: "POST",
     });
   },
 };

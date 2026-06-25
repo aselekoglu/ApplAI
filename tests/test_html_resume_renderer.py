@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from api.app.schemas.resume_render import ResumeItem, ResumeLayout, ResumeSection
+from api.app.schemas.resume_render import ResumeContact, ResumeEntry, ResumeItem, ResumeLayout, ResumeSection
 from api.app.services.html_resume_renderer import render_resume_html, write_resume_html
 
 
@@ -131,6 +131,85 @@ class HtmlResumeRendererTest(unittest.TestCase):
             self.assertEqual(returned_path, str(output_path))
             self.assertTrue(output_path.exists())
             self.assertIn("PROFILE", output_path.read_text(encoding="utf-8"))
+
+
+class StructuredHtmlResumeRendererTest(unittest.TestCase):
+    def test_renders_contact_and_entry_metadata(self):
+        layout = ResumeLayout(
+            owner_name="Ata Selekoglu",
+            contact=ResumeContact(
+                location="Ottawa, ON",
+                phone="613-793-5109",
+                email="sele0007@algonquinlive.com",
+                links=["https://github.com/aselekoglu"],
+            ),
+            target_role="Applied AI Junior Front-End Developer",
+            company_name="Trend Micro",
+            sections=[
+                ResumeSection(
+                    kind="profile",
+                    heading="PROFILE",
+                    items=[
+                        ResumeItem(
+                            item_id="p1",
+                            text="Frontend AI developer.",
+                            source_section="profile",
+                        )
+                    ],
+                ),
+                ResumeSection(
+                    kind="skills",
+                    heading="SUMMARY OF QUALIFICATIONS",
+                    items=[
+                        ResumeItem(
+                            item_id="s1",
+                            text="React, TypeScript, Vite",
+                            source_section="skills",
+                        )
+                    ],
+                ),
+            ],
+            experience_entries=[
+                ResumeEntry(
+                    entry_id="exp1",
+                    title="Technical Business Analyst",
+                    organization="Call Center Studio",
+                    date_range="Mar 2021 - Feb 2024",
+                    items=[
+                        ResumeItem(
+                            item_id="e1",
+                            text="Built REST API integrations.",
+                            source_section="experience",
+                        )
+                    ],
+                )
+            ],
+            project_entries=[
+                ResumeEntry(
+                    entry_id="proj1",
+                    title="ApplAI - AI Assisted Job Application Automation Platform",
+                    date_range="Mar 2026",
+                    items=[
+                        ResumeItem(
+                            item_id="pr1",
+                            text="Built LLM-powered CV tailoring workflows.",
+                            source_section="projects",
+                        )
+                    ],
+                )
+            ],
+        )
+
+        html = render_resume_html(layout)
+
+        self.assertIn("613-793-5109", html)
+        self.assertIn("sele0007@algonquinlive.com", html)
+        self.assertIn("https://github.com/aselekoglu", html)
+        self.assertIn("Technical Business Analyst", html)
+        self.assertIn("Call Center Studio", html)
+        self.assertIn("Mar 2021 - Feb 2024", html)
+        self.assertIn("ApplAI - AI Assisted Job Application Automation Platform", html)
+        self.assertIn("Built LLM-powered CV tailoring workflows.", html)
 
 
 if __name__ == "__main__":

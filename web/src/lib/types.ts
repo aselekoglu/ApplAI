@@ -125,6 +125,7 @@ export interface TailoringResultPayload {
     notes?: string[];
   };
   artifacts?: ExportArtifactMetadata[];
+  approval_status?: string;
   cover_letter: string;
 }
 
@@ -181,4 +182,47 @@ export interface RunDetailResponse {
 
 export interface ExportResponse extends ExportMetadata {
   run_id: string;
+}
+
+export type AiTaskKind =
+  | "score_job"
+  | "tailor_cv"
+  | "render_cv"
+  | "rerun_tailoring"
+  | "gemini_interaction";
+
+export type AiTaskStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+export interface AiTaskRestoreTarget {
+  path: string;
+  state: Record<string, unknown>;
+}
+
+export interface AiTaskEvent {
+  created_at: string;
+  level: "info" | "warning" | "error";
+  message: string;
+}
+
+export interface AiTaskRecord {
+  task_id: string;
+  kind: AiTaskKind;
+  status: AiTaskStatus;
+  title: string;
+  related_label: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  input: Record<string, unknown>;
+  result?: Record<string, unknown> | null;
+  error?: string | null;
+  events: AiTaskEvent[];
+  restore?: AiTaskRestoreTarget | null;
+  approval_required_before_apply: boolean;
+}
+
+export interface AiTaskListResponse {
+  tasks: AiTaskRecord[];
+  count: number;
 }

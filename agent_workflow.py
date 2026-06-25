@@ -1097,6 +1097,39 @@ def plan_strategy(
 # MODULE 5 — Bullet Selector / Rewriter (hybrid)
 # =============================================================================
 
+FRONTEND_AI_TERMS = {
+    "react",
+    "typescript",
+    "javascript",
+    "vite",
+    "frontend",
+    "front-end",
+    "web application",
+    "ui",
+    "agentic",
+    "ai tools",
+    "ai-assisted",
+    "llm",
+    "testing",
+    "playwright",
+    "cypress",
+    "puppeteer",
+}
+
+
+def _role_terms(jd: JDAnalysis) -> set[str]:
+    text = " ".join(jd.must_have_keywords + jd.nice_to_have_keywords + [jd.raw_summary, jd.domain]).lower()
+    terms: set[str] = set()
+    if any(term in text for term in FRONTEND_AI_TERMS):
+        terms.update(FRONTEND_AI_TERMS)
+    return terms
+
+
+def _term_overlap(text: str, terms: set[str]) -> int:
+    lowered = text.lower()
+    return sum(1 for term in terms if term in lowered)
+
+
 _BULLET_REWRITE_PROMPT = """You are a precise CV editor. Your ONLY job is to rephrase a single CV bullet point.
 
 NON-NEGOTIABLE RULES:
@@ -1195,6 +1228,14 @@ def select_and_rewrite(
 ) -> TailoredOutput:
     """Module 5: Build the TailoredOutput — select and optionally rewrite bullets."""
 
+    terms = _role_terms(jd)
+    if terms:
+        for scored in scored_bullets:
+            overlap = _term_overlap(scored.bullet.text, terms)
+            if overlap:
+                scored.relevance_score = min(1.0, scored.relevance_score + overlap * 0.08)
+        scored_bullets.sort(key=lambda s: s.relevance_score, reverse=True)
+
     profile_selections = _select_bullets_for_section(
         scored_bullets, "profile", plan.max_profile_bullets, plan, model_name
     )
@@ -1220,19 +1261,38 @@ def select_and_rewrite(
         allow_rewrites_on_locked=allow_education_rewrites,
     )
 
-    # Skills: pick the most relevant categories based on keyword overlap
     skills_to_highlight: list[str] = []
     all_kw_lower = set(w.lower() for w in jd.must_have_keywords + jd.nice_to_have_keywords)
+    wanted = all_kw_lower | terms
     for category, skills_list in cv.skills_sections.items():
         for skill in skills_list:
-            if skill.lower() in all_kw_lower or any(kw in skill.lower() for kw in all_kw_lower):
+            skill_lower = skill.lower()
+            if skill_lower in wanted or any(term in skill_lower or skill_lower in term for term in wanted):
                 if skill not in skills_to_highlight:
                     skills_to_highlight.append(skill)
 
-    # Fall back to all skills if nothing matched
+    if len(skills_to_highlight) < 6:
+        preferred_skills = [
+            "React",
+            "TypeScript",
+            "JavaScript",
+            "Vite",
+            "REST APIs",
+            "AI Agents",
+            "LLMs",
+            "Puppeteer",
+            "Node.js",
+            "ExpressJS",
+        ]
+        for preferred in preferred_skills:
+            for skills_list in cv.skills_sections.values():
+                for skill in skills_list:
+                    if skill.lower() == preferred.lower() and skill not in skills_to_highlight:
+                        skills_to_highlight.append(skill)
+
     if not skills_to_highlight:
         for skills_list in cv.skills_sections.values():
-            skills_to_highlight.extend(skills_list)
+            skills_to_highlight.extend(skills_list[:8])
 
     selected_count = sum(
         1

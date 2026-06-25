@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -12,7 +13,7 @@ from api.app.schemas.tailoring import ArtifactMetadata, ExportResponse
 from api.app.services.html_resume_renderer import render_resume_pdf
 from api.app.services.pdf_text_validation_service import validate_pdf_text
 from api.app.services.resume_layout_service import build_resume_layout
-from api.app.services.tailoring_service import get_run_record, update_run_record
+from api.app.services.tailoring_service import evaluate_output_quality, get_run_record, update_run_record
 
 
 def _rehydrate_result(result_payload: Dict[str, Any]) -> agent_workflow.WorkflowResult:
@@ -70,27 +71,53 @@ def export_run(run_id: str) -> ExportResponse:
     result_payload = record.get("result", {})
     owner_name = workflow_result.canonical_cv.full_name or "Candidate"
     expected_keywords = result_payload.get("ats_report", {}).get("jd_keywords") or []
+    master_payload = {}
+    base_cv_json_text = workflow_inputs.get("base_cv_json_text")
+    if isinstance(base_cv_json_text, str) and base_cv_json_text.strip():
+        try:
+            master_payload = json.loads(base_cv_json_text)
+        except json.JSONDecodeError:
+            master_payload = {}
     layout = build_resume_layout(
         result_payload,
         owner_name=owner_name,
         target_role=workflow_inputs.get("job_title", ""),
         company_name=workflow_inputs.get("company_name", ""),
         expected_keywords=expected_keywords,
+        master_payload=master_payload,
     )
     html_path, final_pdf_path = _final_cv_paths(owner_name, workflow_inputs.get("company_name", ""))
     final_pdf_path = render_resume_pdf(layout, html_path, final_pdf_path)
     cv_page_count = _pdf_page_count(final_pdf_path)
     ats_validation = validate_pdf_text(final_pdf_path, layout)
-    layout_passed = cv_page_count is not None and cv_page_count <= max_pages and ats_validation.ats_parse_passed
+    extracted_word_count = len((ats_validation.extracted_text or "").split())
+    section_headings = [section.heading for section in layout.sections]
+    if layout.experience_entries:
+        section_headings.append("RELEVANT EXPERIENCE")
+    if layout.project_entries:
+        section_headings.append("PROJECTS")
+    if layout.education_entries:
+        section_headings.append("EDUCATION")
+    quality_validation = evaluate_output_quality(
+        max_pages=max_pages,
+        page_count=cv_page_count,
+        extracted_word_count=extracted_word_count,
+        section_headings=section_headings,
+        keyword_coverage_pct=float(result_payload.get("ats_report", {}).get("coverage_pct") or 0.0),
+        missing_required_sections=ats_validation.missing_headings,
+        broken_bullets=[],
+    )
+    layout_passed = bool(quality_validation.layout_passed) and ats_validation.ats_parse_passed
     previous_layout = record.get("result", {}).get("layout_validation", {})
     notes = list(previous_layout.get("notes") or [])
-    validation_method = "html_pdf_page_count_and_ats_text"
+    validation_method = "html_pdf_quality_gate"
     if cv_page_count is None:
         notes.append("HTML-rendered PDF page count was unavailable.")
     elif cv_page_count <= max_pages:
         notes.append(f"HTML-rendered PDF page count {cv_page_count} is within max_pages {max_pages}.")
     else:
         notes.append(f"HTML-rendered PDF page count {cv_page_count} exceeds max_pages {max_pages}.")
+    notes.extend(quality_validation.notes)
     notes.extend(ats_validation.notes)
 
     artifacts = [

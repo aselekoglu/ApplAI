@@ -5,7 +5,7 @@ from html import escape
 from pathlib import Path
 from typing import Dict, Iterable, List
 
-from api.app.schemas.resume_render import ResumeLayout, ResumeSection
+from api.app.schemas.resume_render import ResumeEntry, ResumeLayout, ResumeSection
 
 try:
     from playwright.sync_api import sync_playwright
@@ -16,7 +16,9 @@ except ImportError:  # pragma: no cover - exercised when optional browser deps a
 TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "templates" / "resume"
 DEFAULT_TEMPLATE_PATH = TEMPLATE_DIR / "default.html"
 DEFAULT_CSS_PATH = TEMPLATE_DIR / "default.css"
-PLACEHOLDER_PATTERN = re.compile(r"__(STYLE|OWNER_NAME|RESUME_META|RESUME_SECTIONS)__")
+PLACEHOLDER_PATTERN = re.compile(
+    r"__(STYLE|OWNER_NAME|CONTACT|RESUME_META|PROFILE_AND_SKILLS|STRUCTURED_ENTRIES|RESUME_SECTIONS)__"
+)
 
 
 def _read_template_asset(path: Path) -> str:
@@ -41,6 +43,19 @@ def _render_metadata(layout: ResumeLayout) -> str:
     if company_name:
         return _escaped_text(company_name)
     return ""
+
+
+def _render_contact(layout: ResumeLayout) -> str:
+    parts = [
+        _escaped_text(layout.contact.location),
+        _escaped_text(layout.contact.phone),
+        _escaped_text(layout.contact.email),
+        *[_escaped_text(link) for link in layout.contact.links],
+    ]
+    parts = [part for part in parts if part]
+    if not parts:
+        return ""
+    return f'      <p class="resume-contact">{" | ".join(parts)}</p>'
 
 
 def _render_items(section: ResumeSection) -> str:
@@ -81,6 +96,72 @@ def _render_sections(sections: Iterable[ResumeSection]) -> str:
     return "\n".join(rendered_sections)
 
 
+def _render_profile_and_skills(layout: ResumeLayout) -> str:
+    sections = [section for section in layout.sections if section.kind in {"profile", "skills"}]
+    return "\n".join(_render_section(section) for section in sections)
+
+
+def _render_entry(entry: ResumeEntry) -> str:
+    title = _escaped_text(entry.title)
+    organization = _escaped_text(entry.organization)
+    location = _escaped_text(entry.location)
+    date_range = _escaped_text(entry.date_range)
+    meta = " | ".join(part for part in [organization, location] if part)
+    title_html = f'<div class="entry-title"><strong>{title}</strong>'
+    if date_range:
+        title_html += f'<span class="entry-date">{date_range}</span>'
+    title_html += "</div>"
+    meta_html = f'<div class="entry-meta">{meta}</div>' if meta else ""
+    items_html = "\n".join(
+        f"          <li>{_escaped_text(item.text)}</li>"
+        for item in entry.items
+        if _clean_text(item.text)
+    )
+    if not items_html:
+        return ""
+    lines = [
+        '        <div class="resume-entry">',
+        f"          {title_html}",
+    ]
+    if meta_html:
+        lines.append(f"          {meta_html}")
+    lines.extend(
+        [
+            '          <ul class="section-list">',
+            items_html,
+            "          </ul>",
+            "        </div>",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _render_entry_section(kind: str, heading: str, entries: Iterable[ResumeEntry]) -> str:
+    rendered_entries = [entry_html for entry in entries if (entry_html := _render_entry(entry))]
+    if not rendered_entries:
+        return ""
+    return "\n".join(
+        [
+            f'      <section class="resume-section resume-section-{kind}">',
+            f"        <h2>{_escaped_text(heading)}</h2>",
+            *rendered_entries,
+            "      </section>",
+        ]
+    )
+
+
+def _render_structured_entries(layout: ResumeLayout) -> str:
+    return "\n".join(
+        section
+        for section in [
+            _render_entry_section("experience", "RELEVANT EXPERIENCE", layout.experience_entries),
+            _render_entry_section("projects", "PROJECTS", layout.project_entries),
+            _render_entry_section("education", "EDUCATION", layout.education_entries),
+        ]
+        if section
+    )
+
+
 def render_resume_html(layout: ResumeLayout) -> str:
     """Render a ResumeLayout into deterministic, ATS-readable HTML."""
     template = _read_template_asset(DEFAULT_TEMPLATE_PATH)
@@ -90,8 +171,15 @@ def render_resume_html(layout: ResumeLayout) -> str:
     replacements: Dict[str, str] = {
         "STYLE": css,
         "OWNER_NAME": _escaped_text(layout.owner_name),
+        "CONTACT": _render_contact(layout),
         "RESUME_META": metadata_html,
-        "RESUME_SECTIONS": _render_sections(layout.sections),
+        "PROFILE_AND_SKILLS": _render_profile_and_skills(layout),
+        "STRUCTURED_ENTRIES": _render_structured_entries(layout),
+        "RESUME_SECTIONS": _render_sections(
+            section
+            for section in layout.sections
+            if section.kind not in {"profile", "skills", "experience", "projects", "education"}
+        ),
     }
 
     return PLACEHOLDER_PATTERN.sub(lambda match: replacements[match.group(1)], template)

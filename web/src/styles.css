@@ -9,6 +9,18 @@
   box-sizing: border-box;
 }
 
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 body {
   margin: 0;
   background: #0f1115;
@@ -693,5 +705,443 @@ h3 {
   .masterListItem {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+.aiTaskQueueDock {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 40;
+  display: flex;
+  justify-content: flex-end;
+  align-self: start;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  pointer-events: none;
+}
+
+.aiTaskQueuePill,
+.aiTaskQueuePanel {
+  pointer-events: auto;
+  border: 1px solid #344154;
+  background: rgba(18, 24, 32, 0.97);
+  color: #e6e9ef;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(12px);
+}
+
+.aiTaskQueuePill {
+  display: inline-grid;
+  grid-template-columns: auto auto auto auto;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.35rem;
+  padding: 0.3rem 0.55rem 0.3rem 0.35rem;
+  border-radius: 999px;
+}
+
+.aiTaskQueuePill:hover {
+  border-color: #4d6d96;
+  background: #182231;
+}
+
+.aiTaskQueuePill--error {
+  border-color: #9b4e5f;
+}
+
+.aiTaskQueueErrorMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  background: #592936;
+  color: #ffb9b9;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.aiTaskQueuePanel {
+  width: min(23rem, calc(100vw - 2rem));
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.aiTaskQueueHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 3rem;
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid #263040;
+}
+
+.aiTaskQueueHeading,
+.aiTaskQueueControls {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.aiTaskQueueHeading {
+  gap: 0.45rem;
+}
+
+.aiTaskQueueControls {
+  flex: 0 0 auto;
+  gap: 0.55rem;
+}
+
+.aiTaskQueueMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  flex: 0 0 1.65rem;
+  border: 1px solid #355c8c;
+  border-radius: 6px;
+  background: #172f4d;
+  color: #a9d0ff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.aiTaskQueueIdentity {
+  color: #f4f7fb;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.aiTaskQueueSummary {
+  overflow: hidden;
+  color: #8ea0b8;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aiTaskQueueCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: #263a54;
+  color: #d7e8ff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.aiTaskQueueChevron {
+  color: #8ea0b8;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.aiTaskQueueTextAction,
+.aiTaskQueueIconButton,
+.aiTaskQueueDismiss {
+  border-color: transparent;
+  background: transparent;
+}
+
+.aiTaskQueueTextAction {
+  padding: 0.2rem;
+  color: #8ab4ff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.aiTaskQueueTextAction:hover:not(:disabled) {
+  color: #c2dcff;
+}
+
+.aiTaskQueueIconButton,
+.aiTaskQueueDismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border-radius: 6px;
+  color: #9fb0c5;
+  line-height: 1;
+}
+
+.aiTaskQueueIconButton:hover:not(:disabled),
+.aiTaskQueueDismiss:hover:not(:disabled) {
+  background: #253142;
+  color: #ffffff;
+}
+
+.aiTaskQueueNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2rem;
+  padding: 0.35rem 0.65rem;
+  border-bottom: 1px solid #4c2d35;
+  background: #2c1c22;
+  color: #ffb9b9;
+  font-size: 0.72rem;
+}
+
+.aiTaskQueueNotice > span {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.aiTaskQueueNoticeDetail {
+  overflow-wrap: anywhere;
+  color: #ffd0d0;
+}
+
+.aiTaskQueueList {
+  max-height: min(50vh, 22rem);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.aiTaskQueueItem {
+  position: relative;
+  min-height: 4.35rem;
+  border-top: 1px solid #263040;
+}
+
+.aiTaskQueueItem:first-child {
+  border-top: 0;
+}
+
+.aiTaskQueueRow {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.65rem;
+  width: 100%;
+  min-height: 4.35rem;
+  margin: 0;
+  padding: 0.65rem 2.5rem 0.65rem 0.7rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+button.aiTaskQueueRow--openable:hover {
+  background: #182130;
+}
+
+button.aiTaskQueueRow--openable:focus-visible {
+  outline: 2px solid #6ca8f7;
+  outline-offset: -2px;
+}
+
+.aiTaskQueueBody {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.aiTaskQueueTitle,
+.aiTaskQueueRelated,
+.aiTaskQueueError {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aiTaskQueueTitle {
+  color: #edf2f8;
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.aiTaskQueueMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  color: #8ea0b8;
+  font-size: 0.7rem;
+}
+
+.aiTaskQueueRelated {
+  min-width: 0;
+}
+
+.aiTaskQueueState {
+  flex: 0 0 auto;
+  font-weight: 650;
+}
+
+.aiTaskQueueState--succeeded {
+  color: #73d8b2;
+}
+
+.aiTaskQueueState--failed,
+.aiTaskQueueState--cancelled {
+  color: #ff9f9f;
+}
+
+.aiTaskQueueState--queued,
+.aiTaskQueueState--running {
+  color: #8ab4ff;
+}
+
+.aiTaskQueueError {
+  color: #ff9f9f;
+  font-size: 0.69rem;
+}
+
+.aiTaskQueueStatus {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  flex: 0 0 1.55rem;
+  border: 2px solid #49627f;
+  border-radius: 50%;
+  color: #dce8f7;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.aiTaskQueueStatus--queued::after {
+  content: "…";
+  transform: translateY(-0.15rem);
+}
+
+.aiTaskQueueStatus--running::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border: 2px solid transparent;
+  border-top-color: #8ab4ff;
+  border-radius: inherit;
+  animation: aiTaskQueueSpin 0.9s linear infinite;
+}
+
+.aiTaskQueueStatus--succeeded {
+  border-color: #4db98f;
+  background: #14382d;
+  color: #7be0ba;
+}
+
+.aiTaskQueueStatus--succeeded::after {
+  content: "✓";
+}
+
+.aiTaskQueueStatus--failed,
+.aiTaskQueueStatus--cancelled {
+  border-color: #b75c70;
+  background: #3b1f27;
+  color: #ffadad;
+}
+
+.aiTaskQueueStatus--failed::after {
+  content: "!";
+}
+
+.aiTaskQueueStatus--cancelled::after {
+  content: "×";
+}
+
+.aiTaskQueueProgress {
+  display: block;
+  width: 100%;
+  height: 0.2rem;
+  margin-top: 0.18rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #263040;
+}
+
+.aiTaskQueueProgress > span {
+  display: block;
+  width: 36%;
+  height: 100%;
+  border-radius: inherit;
+  background: #6ca8f7;
+  animation: aiTaskQueueSlide 1.1s ease-in-out infinite;
+}
+
+.aiTaskQueueOpen {
+  align-self: center;
+  color: #8ab4ff;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.aiTaskQueueDismiss {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+}
+
+@keyframes aiTaskQueueSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes aiTaskQueueSlide {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(285%);
+  }
+}
+
+@media (max-width: 600px) {
+  .aiTaskQueueDock {
+    top: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .aiTaskQueuePanel {
+    width: calc(100vw - 2rem);
+    max-width: 23rem;
+  }
+
+  .aiTaskQueueHeader {
+    gap: 0.45rem;
+    padding-inline: 0.55rem;
+  }
+
+  .aiTaskQueueControls {
+    gap: 0.25rem;
+  }
+
+  .aiTaskQueueRow {
+    padding-left: 0.6rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aiTaskQueueStatus--running::after,
+  .aiTaskQueueProgress > span {
+    animation: none;
+  }
+
+  .aiTaskQueueProgress > span {
+    width: 100%;
+    opacity: 0.7;
   }
 }

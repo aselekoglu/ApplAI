@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { RichTextEditorPlaceholder } from "../features/editor/RichTextEditorPlaceholder";
 import { SuggestionsList } from "../features/suggestions/SuggestionsList";
 import { TailorOptionsForm } from "../features/tailoring/TailorOptionsForm";
+import { useAiTaskSubmit } from "../features/ai-tasks/useAiTaskSubmit";
 import { apiClient } from "../lib/api-client";
 import type { MasterSummary, TailorRunOptions, TailorRunResponse } from "../lib/types";
 
@@ -26,7 +27,9 @@ export function TailoringPage() {
   const [runResult, setRunResult] = useState<TailorRunResponse | null>(null);
   const [exportPaths, setExportPaths] = useState<{ cv?: string; cl?: string; docsUrl?: string | null }>({});
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const { queueTailoring, queueRender } = useAiTaskSubmit();
 
   useEffect(() => {
     apiClient
@@ -45,14 +48,18 @@ export function TailoringPage() {
   async function handleRun() {
     setBusy(true);
     setError(null);
-    setExportPaths({});
+    setNotice(null);
     try {
-      const result = await apiClient.runTailoring({
+      const { task, created } = await queueTailoring({
         master_id: masterId,
         job_description: jobDescription,
         options,
       });
-      setRunResult(result);
+      setNotice(
+        created
+          ? `Queued ${task.title}. Open Q for progress.`
+          : `${task.title} is already active in Q.`
+      );
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -64,13 +71,18 @@ export function TailoringPage() {
     if (!runResult) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      const response = await apiClient.exportRun(runResult.run_id);
-      setExportPaths({
-        cv: response.cv_path,
-        cl: response.cover_letter_path,
-        docsUrl: response.docs_url,
-      });
+      const relatedLabel =
+        [runResult.options.company_name, runResult.options.job_title].filter(Boolean).join(" - ") ||
+        runResult.run_id;
+      const { task, created } = await queueRender(runResult.run_id, relatedLabel);
+      setExportPaths({});
+      setNotice(
+        created
+          ? `Queued ${task.title}. Open Q for progress.`
+          : `${task.title} is already active in Q.`
+      );
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -132,6 +144,7 @@ export function TailoringPage() {
         </button>
       </div>
       {error ? <p className="error">{error}</p> : null}
+      {notice ? <p className="muted">{notice}</p> : null}
 
       {runResult ? (
         <section className="stack">

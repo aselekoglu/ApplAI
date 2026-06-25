@@ -1,6 +1,6 @@
 # ApplAI Active TODO
 
-Last updated: 2026-06-21
+Last updated: 2026-06-25
 
 ## Current Status
 
@@ -12,6 +12,7 @@ Last updated: 2026-06-21
 - [x] Sprint 1 Career Brain + Tailored Examples foundation implemented.
 - [x] Sprint 2 Job Intake + Career Brain-backed Scoring vertical slice implemented.
 - [ ] Sprint 3 CV Tailoring Engine continuation is implemented through deterministic compression and render validation hardening; HTML-first PDF rendering is implemented, approval UI remains.
+- [ ] Sprint 3.2 durable AI task queue and Gemini Interactions integration is partially implemented. Backend queue, Gemini wrapper, API routes, queue context/panel, and queued Tailoring/Runs actions are complete; Runs restore-state wiring and final verification remain. See `docs/ai-task-queue-handoff.md`.
 
 ## Completed Sprint: Sprint 0.5 - Eve Spike And Boundary Proof
 
@@ -183,6 +184,32 @@ Sprint 3.1 implementation plan:
 - [x] Integrate HTML PDF artifacts into `POST /tailor/export` while keeping DOCX compatibility output available.
 - [x] Update Eve `render_cv` contracts only as a thin adapter over Core response metadata.
 - [ ] Build the user-facing diff/approval screen on top of the HTML preview and render metadata.
+
+## Active Continuation: Sprint 3.2 - Durable AI Task Queue
+
+Implementation plan:
+
+- `docs/superpowers/plans/2026-06-23-ai-task-queue-and-gemini-interactions.md`
+
+Completed:
+
+- [x] Add persisted AI task schemas and JSON-backed local queue under `docs/ai_tasks/`.
+- [x] Add queue handlers for scoring, tailoring, rendering, and historical reruns.
+- [x] Add a private-by-default Gemini Interactions wrapper with `store=false`.
+- [x] Add `/ai-tasks` create/list/get/cancel routes and web client contracts.
+- [x] Add polling queue context with cancellation, minimized state, local hiding, and race protection.
+- [x] Add an Arpa-inspired responsive Q panel with restore navigation, errors, retries, and accessibility states.
+- [x] Route Tailoring and Runs tailoring/render/rerun actions through the durable queue.
+- [x] Add client-side active-task deduplication with authoritative server checks and in-flight request sharing.
+
+Remaining:
+
+- [ ] Run the final Task 8 code-quality re-review after the latest dedupe reconciliation fixes.
+- [ ] Wire Runs page route-state restore for `selectedRunId` and `showExports`, without selection loops.
+- [ ] Repeat the complete backend, Sprint 3, web, Eve, import, and whitespace verification set after remaining implementation. The 2026-06-25 handoff snapshot currently passes.
+- [ ] Update this section to completed only after those checks pass.
+
+Current handoff details, changed-file map, and exact next steps are recorded in `docs/ai-task-queue-handoff.md`.
 
 ## Near-Term Backlog
 
